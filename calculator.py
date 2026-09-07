@@ -2,6 +2,11 @@ def calculate_percentage(value, percentage):
     return value * percentage / 100
 
 
-if __name__ == "__main__":
-    result = calculate_percentage(800, 25)
-    print("Calculator result:", result)
+def calculate_discount(value, percentage):
+    discount = calculate_percentage(value, percentage)
+    return value - discount
+
+
+def calculate_increase(value, percentage):
+    increase = calculate_percentage(value, percentage)
+    return value + increase
