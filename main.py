@@ -1,6 +1,8 @@
 import json
 import ollama
 
+from difficulty import get_difficulty
+
 from aptitude_tools import (
     calculate_percentage,
     calculate_profit,
@@ -34,6 +36,7 @@ MODEL = "llama3.2:3b"
 def parse_response(result):
 
     try:
+
         # Remove markdown code fences if the model adds them
         result = result.strip()
 
@@ -65,6 +68,7 @@ def parse_response(result):
     except json.JSONDecodeError:
 
         print("\n⚠️ AI returned invalid JSON.")
+
         print("Raw AI response:")
         print(result)
 
@@ -129,6 +133,10 @@ def validate_question(
 
     if topic == "Percentage":
 
+        # ----------------------------------------------------
+        # Percentage
+        # ----------------------------------------------------
+
         if question_type == "PERCENTAGE":
 
             required = [
@@ -171,6 +179,10 @@ def validate_question(
                 return False, (
                     "Percentage must be greater than zero."
                 )
+
+        # ----------------------------------------------------
+        # Discount
+        # ----------------------------------------------------
 
         elif question_type == "DISCOUNT":
 
@@ -220,6 +232,10 @@ def validate_question(
                 return False, (
                     "Discount percentage must be less than 100."
                 )
+
+        # ----------------------------------------------------
+        # Increase
+        # ----------------------------------------------------
 
         elif question_type == "INCREASE":
 
@@ -294,6 +310,10 @@ def validate_question(
                 "Cost price must be greater than zero."
             )
 
+        # ----------------------------------------------------
+        # Profit
+        # ----------------------------------------------------
+
         if question_type == "PROFIT":
 
             if "profit_percentage" not in parameters:
@@ -319,6 +339,10 @@ def validate_question(
                 return False, (
                     "Profit percentage must be greater than zero."
                 )
+
+        # ----------------------------------------------------
+        # Loss
+        # ----------------------------------------------------
 
         elif question_type == "LOSS":
 
@@ -362,8 +386,13 @@ def validate_question(
 
         try:
 
-            a = float(parameters["a"])
-            b = float(parameters["b"])
+            a = float(
+                parameters["a"]
+            )
+
+            b = float(
+                parameters["b"]
+            )
 
         except (ValueError, TypeError):
 
@@ -454,13 +483,22 @@ def validate_question(
             )
 
         if principal <= 0:
-            return False, "Principal must be greater than zero."
+
+            return False, (
+                "Principal must be greater than zero."
+            )
 
         if rate <= 0:
-            return False, "Rate must be greater than zero."
+
+            return False, (
+                "Rate must be greater than zero."
+            )
 
         if time <= 0:
-            return False, "Time must be greater than zero."
+
+            return False, (
+                "Time must be greater than zero."
+            )
 
     # ========================================================
     # TIME AND WORK
@@ -584,7 +622,10 @@ def validate_question(
 # GENERATE QUESTION
 # ============================================================
 
-def generate_question(topic_instruction):
+def generate_question(
+    topic_instruction,
+    difficulty
+):
 
     available_topics = get_available_topics()
 
@@ -594,28 +635,89 @@ def generate_question(topic_instruction):
     )
 
     prompt = f"""
+
 You are AptitudeMind, an intelligent adaptive aptitude mentor.
 
 {topic_instruction}
 
-Available aptitude topics:
+The required difficulty level is:
+
+{difficulty}
+
+============================================================
+DIFFICULTY RULES
+============================================================
+
+Easy:
+
+- Basic concept
+- Simple numbers
+- One or two calculation steps
+- Suitable for beginners
+- Direct formula application
+
+Medium:
+
+- Requires multiple calculation steps
+- Requires some reasoning
+- Moderate interview-level difficulty
+- Not too easy
+- Not extremely difficult
+
+Hard:
+
+- Requires deeper reasoning
+- Multiple calculation steps
+- More challenging numbers
+- Interview-level challenge
+- May combine multiple concepts
+
+The generated question MUST match the requested difficulty.
+
+============================================================
+AVAILABLE APTITUDE TOPICS
+============================================================
 
 {topic_text}
 
+============================================================
+GENERAL RULES
+============================================================
+
 Generate ONE aptitude question.
 
-IMPORTANT RULES:
-
 1. The question must be mathematically complete.
-2. Every number required to solve the question must be provided.
-3. Parameters must exactly match the question.
-4. Never invent missing information.
-5. Return ONLY valid JSON.
-6. Do not use markdown.
-7. Do not add explanations.
-8. Generate only ONE question.
 
-The JSON format MUST be:
+2. Every number required to solve the question
+   must be provided.
+
+3. Parameters must exactly match the question.
+
+4. Never invent missing information.
+
+5. Never create an ambiguous question.
+
+6. The answer must be mathematically verifiable.
+
+7. Return ONLY valid JSON.
+
+8. Do not use markdown.
+
+9. Do not add explanations.
+
+10. Generate only ONE question.
+
+11. The topic MUST be one of the available topics.
+
+12. The type MUST be valid for that topic.
+
+13. The difficulty MUST match:
+
+{difficulty}
+
+============================================================
+JSON FORMAT
+============================================================
 
 {{
     "question": "question text",
@@ -630,7 +732,7 @@ The JSON format MUST be:
 PERCENTAGE EXAMPLES
 ============================================================
 
-Example:
+Percentage:
 
 {{
     "question": "What is 20% of 450?",
@@ -642,7 +744,7 @@ Example:
     }}
 }}
 
-Discount example:
+Discount:
 
 {{
     "question": "A discount of 15% is given on a marked price of ₹2400. What is the discounted price?",
@@ -654,7 +756,7 @@ Discount example:
     }}
 }}
 
-Increase example:
+Increase:
 
 {{
     "question": "A salary of ₹20000 is increased by 10%. What is the new salary?",
@@ -737,23 +839,42 @@ TIME SPEED DISTANCE EXAMPLE
 }}
 
 ============================================================
-
-Do not generate an incomplete question.
+FINAL REQUIREMENT
+============================================================
 
 Return ONLY JSON.
+
+Do not return:
+
+- explanations
+- comments
+- markdown
+- multiple questions
+- incomplete questions
+
 """
 
-    response = ollama.chat(
-        model=MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
 
-    return response["message"]["content"].strip()
+    try:
+
+        response = ollama.chat(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        return response["message"]["content"].strip()
+
+    except Exception as error:
+
+        print("\n⚠️ Ollama error:")
+        print(error)
+
+        return ""
 
 
 # ============================================================
@@ -1021,11 +1142,13 @@ def show_explanation(
             )
 
             print(
-                f"Discount = {discount_percentage}% of ₹{marked_price}"
+                f"Discount = {discount_percentage}% "
+                f"of ₹{marked_price}"
             )
 
             print(
-                f"= ₹{marked_price} × {discount_percentage} / 100"
+                f"= ₹{marked_price} × "
+                f"{discount_percentage} / 100"
             )
 
             print(
@@ -1058,7 +1181,8 @@ def show_explanation(
             )
 
             print(
-                f"Increase = {increase_percentage}% of ₹{original_value}"
+                f"Increase = {increase_percentage}% "
+                f"of ₹{original_value}"
             )
 
             print(
@@ -1097,7 +1221,8 @@ def show_explanation(
             )
 
             print(
-                f"Profit = {profit_percentage}% of ₹{cost_price}"
+                f"Profit = {profit_percentage}% "
+                f"of ₹{cost_price}"
             )
 
             print(
@@ -1126,7 +1251,8 @@ def show_explanation(
             )
 
             print(
-                f"Loss = {loss_percentage}% of ₹{cost_price}"
+                f"Loss = {loss_percentage}% "
+                f"of ₹{cost_price}"
             )
 
             print(
@@ -1197,7 +1323,8 @@ def show_explanation(
         )
 
         print(
-            f"= {principal} × {rate} × {time} / 100"
+            f"= {principal} × {rate} × "
+            f"{time} / 100"
         )
 
         print(
@@ -1294,16 +1421,25 @@ def main():
     available_topics = get_available_topics()
 
     # --------------------------------------------------------
-    # Adaptive topic selection
+    # Adaptive topic + difficulty selection
     # --------------------------------------------------------
 
     if weak_topic:
+
+        difficulty = get_difficulty(
+            weak_topic
+        )
 
         print(
             f"🎯 Current focus topic: {weak_topic}"
         )
 
+        print(
+            f"📊 Current difficulty: {difficulty}"
+        )
+
         topic_instruction = f"""
+
 The student's current weakest topic is:
 
 {weak_topic}
@@ -1312,20 +1448,29 @@ Generate the question from this topic.
 
 Choose an appropriate question type from the
 allowed types for that topic.
+
 """
 
     else:
+
+        difficulty = "Easy"
 
         print(
             "🎯 No weak topic detected."
         )
 
+        print(
+            "📊 Starting difficulty: Easy"
+        )
+
         topic_instruction = f"""
+
 Choose ONE topic from these available topics:
 
 {available_topics}
 
 Choose a suitable beginner-level topic.
+
 """
 
     # --------------------------------------------------------
@@ -1333,8 +1478,17 @@ Choose a suitable beginner-level topic.
     # --------------------------------------------------------
 
     result = generate_question(
-        topic_instruction
+        topic_instruction,
+        difficulty
     )
+
+    if not result:
+
+        print(
+            "\n🔄 Question generation failed."
+        )
+
+        return
 
     # --------------------------------------------------------
     # Parse AI response
