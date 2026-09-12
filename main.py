@@ -128,6 +128,89 @@ def validate_question(
         )
 
     # ========================================================
+    # SEMANTIC / TYPE CONSISTENCY GUARDRAIL
+    # ========================================================
+
+    # The LLM can sometimes generate a correct question but assign
+    # the wrong question type. Never trust the type blindly because
+    # the deterministic calculator uses the type to calculate the answer.
+    question_lower = question.lower()
+
+    if topic == "Percentage":
+
+        discount_final_phrases = [
+            "selling price after discount",
+            "selling price after the discount",
+            "sale price after discount",
+            "sale price after the discount",
+            "final price after discount",
+            "final price after the discount",
+            "price after discount",
+            "price after the discount",
+            "discounted price",
+            "discounted selling price",
+            "net price after discount"
+        ]
+
+        if question_type == "PERCENTAGE":
+            if any(phrase in question_lower for phrase in discount_final_phrases):
+                return False, (
+                    "Semantic mismatch: the question asks for a final/"
+                    "discounted selling price, but the AI labeled it "
+                    "PERCENTAGE. Expected DISCOUNT."
+                )
+
+        if question_type == "DISCOUNT":
+            if not any(phrase in question_lower for phrase in [
+                "discount",
+                "marked price",
+                "selling price",
+                "sale price"
+            ]):
+                return False, (
+                    "Semantic mismatch: DISCOUNT type was selected, "
+                    "but the question does not describe a discount."
+                )
+
+        increase_final_phrases = [
+            "new salary",
+            "new price",
+            "new value",
+            "new amount",
+            "after the increase",
+            "after increase",
+            "increased by"
+        ]
+
+        if question_type == "PERCENTAGE":
+            if any(phrase in question_lower for phrase in increase_final_phrases):
+                if "increased by" in question_lower and not any(
+                    phrase in question_lower for phrase in [
+                        "what percentage",
+                        "what is the percentage",
+                        "percentage increase"
+                    ]
+                ):
+                    return False, (
+                        "Semantic mismatch: the question asks for a new "
+                        "value after an increase, but the AI labeled it "
+                        "PERCENTAGE. Expected INCREASE."
+                    )
+
+        if question_type == "INCREASE":
+            if not any(phrase in question_lower for phrase in [
+                "increase",
+                "increased",
+                "salary",
+                "price",
+                "value"
+            ]):
+                return False, (
+                    "Semantic mismatch: INCREASE type was selected, "
+                    "but the question does not describe an increase."
+                )
+
+    # ========================================================
     # PERCENTAGE
     # ========================================================
 
@@ -143,6 +226,13 @@ def validate_question(
                 "value",
                 "percentage"
             ]
+
+            unexpected = set(parameters) - set(required)
+            if unexpected:
+                return False, (
+                    "PERCENTAGE received unexpected parameter(s): "
+                    + ", ".join(sorted(unexpected))
+                )
 
             for parameter in required:
 
@@ -186,10 +276,38 @@ def validate_question(
 
         elif question_type == "DISCOUNT":
 
+            # DISCOUNT currently supports ONE discount only.
+            # Reject questions that require successive/multiple discounts.
+            question_lower = question.lower()
+            forbidden_discount_phrases = [
+                "twice",
+                "two discounts",
+                "successive discount",
+                "successive discounts",
+                "multiple discounts",
+                "discounted twice",
+                "discount is applied twice",
+                "two successive discounts"
+            ]
+
+            for phrase in forbidden_discount_phrases:
+                if phrase in question_lower:
+                    return False, (
+                        "DISCOUNT currently supports only one discount. "
+                        "Successive or multiple discounts are not supported yet."
+                    )
+
             required = [
                 "marked_price",
                 "discount_percentage"
             ]
+
+            unexpected = set(parameters) - set(required)
+            if unexpected:
+                return False, (
+                    "DISCOUNT received unexpected parameter(s): "
+                    + ", ".join(sorted(unexpected))
+                )
 
             for parameter in required:
 
@@ -239,46 +357,66 @@ def validate_question(
 
         elif question_type == "INCREASE":
 
-            required = [
-                "original_value",
-                "increase_percentage"
-            ]
+            if (
+                "original_value" in parameters
+                and "increase_percentage" in parameters
+            ):
 
-            for parameter in required:
+                try:
+                    original_value = float(
+                        parameters["original_value"]
+                    )
+                    increase_percentage = float(
+                        parameters["increase_percentage"]
+                    )
+                except (ValueError, TypeError):
+                    return False, "Invalid increase parameters."
 
-                if parameter not in parameters:
-
+                if original_value <= 0:
                     return False, (
-                        f"Missing parameter: {parameter}."
+                        "Original value must be greater than zero."
                     )
 
-            try:
+                if increase_percentage <= 0:
+                    return False, (
+                        "Increase percentage must be greater than zero."
+                    )
 
-                original_value = float(
-                    parameters["original_value"]
-                )
+            elif (
+                "previous_percentage" in parameters
+                and "current_percentage" in parameters
+            ):
 
-                increase_percentage = float(
-                    parameters["increase_percentage"]
-                )
+                try:
+                    previous_percentage = float(
+                        parameters["previous_percentage"]
+                    )
+                    current_percentage = float(
+                        parameters["current_percentage"]
+                    )
+                except (ValueError, TypeError):
+                    return False, (
+                        "Invalid percentage increase parameters."
+                    )
 
-            except (ValueError, TypeError):
+                if previous_percentage < 0:
+                    return False, (
+                        "Previous percentage cannot be negative."
+                    )
 
-                return False, (
-                    "Invalid increase parameters."
-                )
+                if current_percentage < 0:
+                    return False, (
+                        "Current percentage cannot be negative."
+                    )
 
-            if original_value <= 0:
+                if current_percentage <= previous_percentage:
+                    return False, (
+                        "Current percentage must be greater "
+                        "than previous percentage."
+                    )
 
-                return False, (
-                    "Original value must be greater than zero."
-                )
-
-            if increase_percentage <= 0:
-
-                return False, (
-                    "Increase percentage must be greater than zero."
-                )
+            else:
+                return False, "Missing increase parameters."
 
     # ========================================================
     # PROFIT AND LOSS
@@ -693,7 +831,13 @@ Generate ONE aptitude question.
 
 3. Parameters must exactly match the question.
 
-4. Never invent missing information.
+4. For PERCENTAGE, use ONLY the parameters 'value' and 'percentage'.
+
+5. For DISCOUNT, use ONLY 'marked_price' and 'discount_percentage', and ask about ONE discount.
+
+6. For INCREASE, use either 'original_value' + 'increase_percentage' OR 'previous_percentage' + 'current_percentage'.
+
+7. Never invent missing information.
 
 5. Never create an ambiguous question.
 
@@ -711,7 +855,9 @@ Generate ONE aptitude question.
 
 12. The type MUST be valid for that topic.
 
-13. The difficulty MUST match:
+13. Never use DISCOUNT for successive or multiple discounts.
+
+14. The difficulty MUST match:
 
 {difficulty}
 
@@ -745,6 +891,14 @@ Percentage:
 }}
 
 Discount:
+
+IMPORTANT: DISCOUNT supports exactly ONE discount only.
+Do NOT create questions containing:
+- two discounts
+- successive discounts
+- multiple discounts
+- discount applied twice
+- combined discounts
 
 {{
     "question": "A discount of 15% is given on a marked price of ₹2400. What is the discounted price?",
@@ -927,20 +1081,40 @@ def calculate_answer(
 
         elif question_type == "INCREASE":
 
-            original_value = float(
-                parameters["original_value"]
-            )
+            if (
+                "original_value" in parameters
+                and "increase_percentage" in parameters
+            ):
 
-            increase_percentage = float(
-                parameters["increase_percentage"]
-            )
+                original_value = float(
+                    parameters["original_value"]
+                )
 
-            increase = calculate_percentage(
-                original_value,
-                increase_percentage
-            )
+                increase_percentage = float(
+                    parameters["increase_percentage"]
+                )
 
-            return original_value + increase
+                increase = calculate_percentage(
+                    original_value,
+                    increase_percentage
+                )
+
+                return original_value + increase
+
+            elif (
+                "previous_percentage" in parameters
+                and "current_percentage" in parameters
+            ):
+
+                previous_percentage = float(
+                    parameters["previous_percentage"]
+                )
+
+                current_percentage = float(
+                    parameters["current_percentage"]
+                )
+
+                return current_percentage - previous_percentage
 
     # ========================================================
     # PROFIT AND LOSS
@@ -1167,37 +1341,65 @@ def show_explanation(
 
         elif question_type == "INCREASE":
 
-            original_value = float(
-                parameters["original_value"]
-            )
+            if (
+                "original_value" in parameters
+                and "increase_percentage" in parameters
+            ):
 
-            increase_percentage = float(
-                parameters["increase_percentage"]
-            )
+                original_value = float(
+                    parameters["original_value"]
+                )
 
-            increase = calculate_percentage(
-                original_value,
-                increase_percentage
-            )
+                increase_percentage = float(
+                    parameters["increase_percentage"]
+                )
 
-            print(
-                f"Increase = {increase_percentage}% "
-                f"of ₹{original_value}"
-            )
+                increase = calculate_percentage(
+                    original_value,
+                    increase_percentage
+                )
 
-            print(
-                f"= ₹{increase}"
-            )
+                print(
+                    f"Increase = {increase_percentage}% "
+                    f"of ₹{original_value}"
+                )
 
-            print("\nNew value:")
+                print(
+                    f"= ₹{increase}"
+                )
 
-            print(
-                f"= ₹{original_value} + ₹{increase}"
-            )
+                print("\nNew value:")
 
-            print(
-                f"= ₹{correct_answer}"
-            )
+                print(
+                    f"= ₹{original_value} + ₹{increase}"
+                )
+
+                print(
+                    f"= ₹{correct_answer}"
+                )
+
+            elif (
+                "previous_percentage" in parameters
+                and "current_percentage" in parameters
+            ):
+
+                previous_percentage = float(
+                    parameters["previous_percentage"]
+                )
+
+                current_percentage = float(
+                    parameters["current_percentage"]
+                )
+
+                print(
+                    f"Percentage-point increase = "
+                    f"{current_percentage}% - "
+                    f"{previous_percentage}%"
+                )
+
+                print(
+                    f"= {correct_answer} percentage points"
+                )
 
     # ========================================================
     # PROFIT AND LOSS
@@ -1474,93 +1676,71 @@ Choose a suitable beginner-level topic.
 """
 
     # --------------------------------------------------------
-    # Generate question
+    # Generate + validate question
     # --------------------------------------------------------
 
-    result = generate_question(
-        topic_instruction,
-        difficulty
-    )
+    # Llama 3.2 can occasionally produce a valid JSON structure with
+    # a semantically wrong type. We therefore validate the question
+    # before allowing it to reach the calculator.
+    MAX_GENERATION_ATTEMPTS = 3
 
-    if not result:
+    accepted_question = False
 
-        print(
-            "\n🔄 Question generation failed."
+    for attempt in range(1, MAX_GENERATION_ATTEMPTS + 1):
+
+        result = generate_question(
+            topic_instruction,
+            difficulty
         )
 
-        return
+        if not result:
+            print(
+                f"\n🔄 Question generation attempt {attempt} failed."
+            )
+            continue
 
-    # --------------------------------------------------------
-    # Parse AI response
-    # --------------------------------------------------------
+        (
+            question,
+            topic,
+            question_type,
+            parameters
+        ) = parse_response(result)
 
-    (
-        question,
-        topic,
-        question_type,
-        parameters
-    ) = parse_response(result)
+        if question is None:
+            print(
+                f"\n⚠️ Attempt {attempt}: AI response could not be parsed."
+            )
+            continue
 
-    if question is None:
+        print(f"\n🔍 Validation attempt {attempt}/{MAX_GENERATION_ATTEMPTS}")
+        print("Question:", question)
+        print("Topic:", topic)
+        print("Type:", question_type)
+        print("Parameters:", parameters)
 
-        print(
-            "\n🔄 Question rejected."
+        valid, message = validate_question(
+            question,
+            topic,
+            question_type,
+            parameters
         )
 
-        return
+        if valid:
+            accepted_question = True
+            break
 
-    # --------------------------------------------------------
-    # Debug information
-    # --------------------------------------------------------
+        print("\n⚠️ Invalid question generated.")
+        print("Reason:", message)
 
-    print("\n🔍 AI Generated Data:")
+        if attempt < MAX_GENERATION_ATTEMPTS:
+            print("🔄 Regenerating a verified question...")
 
-    print(
-        "Question:",
-        question
-    )
-
-    print(
-        "Topic:",
-        topic
-    )
-
-    print(
-        "Type:",
-        question_type
-    )
-
-    print(
-        "Parameters:",
-        parameters
-    )
-
-    # --------------------------------------------------------
-    # Validate
-    # --------------------------------------------------------
-
-    valid, message = validate_question(
-        question,
-        topic,
-        question_type,
-        parameters
-    )
-
-    if not valid:
-
+    if not accepted_question:
         print(
-            "\n⚠️ Invalid question generated."
+            "\n❌ AptitudeMind could not generate a verified question "
+            f"after {MAX_GENERATION_ATTEMPTS} attempts."
         )
-
-        print(
-            "Reason:",
-            message
-        )
-
-        print(
-            "\n🔄 Question rejected."
-        )
-
+        print("🛡️ No result was recorded in progress memory.")
         return
 
     # --------------------------------------------------------
@@ -1656,17 +1836,26 @@ Choose a suitable beginner-level topic.
                 correct_answer
             )
 
+            mistake_found = analyze_mistake(
+                topic,
+                question_type,
+                parameters,
+                student_value,
+                correct_answer
+            )
+
             record_result(
                 topic,
                 False
             )
 
-            show_explanation(
+            if not mistake_found:
+                show_explanation(
                 topic,
                 question_type,
-                parameters,
-                correct_answer
-            )
+                    parameters,
+                    correct_answer
+                )
 
     except ValueError:
 
@@ -1697,6 +1886,45 @@ Choose a suitable beginner-level topic.
             f"\n🎯 AptitudeMind focus: {weak_topic}"
         )
 
+
+# ============================================================
+# MISTAKE ANALYSIS
+# ============================================================
+
+def analyze_mistake(topic, question_type, parameters, student_answer, correct_answer):
+    """Identify common mistakes and explain them in mentor style."""
+
+    if topic == "Percentage" and question_type == "INCREASE":
+        if "original_value" in parameters and "increase_percentage" in parameters:
+            original_value = float(parameters["original_value"])
+            increase_percentage = float(parameters["increase_percentage"])
+
+            increase = calculate_percentage(
+                original_value,
+                increase_percentage
+            )
+
+            # The student entered only the increase amount.
+            if abs(student_answer - increase) < 0.01:
+                print("\n🧠 Mistake Analysis:")
+                print(f"You entered ₹{student_answer:g}.")
+                print(
+                    f"₹{increase:g} is the increase amount, "
+                    "not the final value."
+                )
+                print(
+                    f"\nIncrease = {increase_percentage:g}% "
+                    f"of ₹{original_value:g}"
+                )
+                print(f"= ₹{increase:g}")
+                print("\nNew value:")
+                print(
+                    f"= ₹{original_value:g} + ₹{increase:g}"
+                )
+                print(f"= ₹{correct_answer:g}")
+                return True
+
+    return False
 
 # ============================================================
 # START APPLICATION
