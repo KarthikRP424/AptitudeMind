@@ -1,41 +1,33 @@
-# ============================================================
-# AptitudeMind - Agent Decision Layer
-# ============================================================
-
 from search_engine import find_questions
 from difficulty import get_difficulty
+from generator import generate_question
+from validator import validate_question
 
 
-# ============================================================
-# Agent Decision
-# ============================================================
+MAX_VALIDATION_ATTEMPTS = 3
 
-def decide_action(
-    query=None,
-    topic=None,
-    company=None,
-    difficulty=None
-):
+
+def decide_action(query=None, topic=None, company=None, difficulty=None):
     """
-    Decide what AptitudeMind should do next.
-
-    Priority:
-
-    1. Search for a matching question.
-    2. If a question exists -> retrieve it.
-    3. If no question exists -> generate a new question.
+    Decide what AptitudeMind should do.
     """
-
-    # --------------------------------------------------------
-    # If the user provides a search query
-    # --------------------------------------------------------
 
     if query:
-
         filters, questions = find_questions(query)
 
-        if questions:
+        has_filter = any(
+            value is not None
+            for value in filters.values()
+        )
 
+        if not has_filter:
+            return {
+                "action": "ask",
+                "filters": filters,
+                "questions": []
+            }
+
+        if questions:
             return {
                 "action": "retrieve",
                 "filters": filters,
@@ -48,12 +40,7 @@ def decide_action(
             "questions": []
         }
 
-    # --------------------------------------------------------
-    # If topic is provided directly
-    # --------------------------------------------------------
-
     if topic:
-
         selected_difficulty = difficulty
 
         if selected_difficulty is None:
@@ -69,10 +56,6 @@ def decide_action(
             "questions": []
         }
 
-    # --------------------------------------------------------
-    # No information provided
-    # --------------------------------------------------------
-
     return {
         "action": "ask",
         "filters": {},
@@ -80,72 +63,242 @@ def decide_action(
     }
 
 
-# ============================================================
-# Display Agent Decision
-# ============================================================
-
-def show_decision(decision):
-
-    print("\n🤖 AptitudeMind Agent")
-    print("====================")
+def execute_decision(decision):
+    """
+    Execute the action selected by the agent.
+    """
 
     action = decision["action"]
+    filters = decision["filters"]
+    questions = decision["questions"]
+
+    # -----------------------------------------
+    # RETRIEVE
+    # -----------------------------------------
 
     if action == "retrieve":
 
-        print("🧠 Decision: RETRIEVE")
-        print("📚 Matching question found.")
+        if not questions:
+            return {
+                "status": "error",
+                "action": "retrieve",
+                "question": None,
+                "message": "No question available."
+            }
 
-    elif action == "generate":
+        question = questions[0]
 
-        print("🧠 Decision: GENERATE")
-        print("🤖 No suitable question found.")
-        print("   LLM should generate a new question.")
+        validation = validate_question(question)
 
-    elif action == "ask":
+        if not validation["valid"]:
+            return {
+                "status": "error",
+                "action": "retrieve",
+                "question": None,
+                "message": "Retrieved question failed validation.",
+                "validation_errors": validation["errors"]
+            }
 
-        print("🧠 Decision: ASK")
-        print("❓ More information is required.")
+        return {
+            "status": "success",
+            "action": "retrieve",
+            "question": question,
+            "message": (
+                "Question retrieved and validated "
+                "from question bank."
+            )
+        }
 
-    print("\n🔎 Filters:")
+    # -----------------------------------------
+    # GENERATE WITH SELF-CORRECTION
+    # -----------------------------------------
 
-    filters = decision["filters"]
+    if action == "generate":
 
-    print(
-        "🏢 Company:",
-        filters.get("company") or "Any"
-    )
+        topic = filters.get("topic")
+        difficulty = filters.get("difficulty")
+        company = filters.get("company")
 
-    print(
-        "📚 Topic:",
-        filters.get("topic") or "Any"
-    )
+        if not topic:
+            return {
+                "status": "error",
+                "action": "generate",
+                "question": None,
+                "message": "Topic is required for generation."
+            }
 
-    print(
-        "🎯 Difficulty:",
-        filters.get("difficulty") or "Any"
-    )
+        last_errors = []
 
-    if decision["questions"]:
+        for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
 
+            print(
+                f"\n🔄 Generation attempt "
+                f"{attempt}/{MAX_VALIDATION_ATTEMPTS}"
+            )
+
+            generated_question = generate_question(
+                topic=topic,
+                difficulty=difficulty,
+                company=company
+            )
+
+            question_data = {
+                "question": generated_question,
+                "topic": topic,
+                "difficulty": difficulty,
+                "company": company,
+                "source": "ai_generated"
+            }
+
+            validation = validate_question(
+                question_data
+            )
+
+            if validation["valid"]:
+
+                print("🛡️ Validation: PASSED")
+
+                return {
+                    "status": "success",
+                    "action": "generate",
+                    "question": question_data,
+                    "message": (
+                        "Question generated by Ollama "
+                        "and passed validation."
+                    ),
+                    "generation_attempts": attempt
+                }
+
+            last_errors = validation["errors"]
+
+            print("🛡️ Validation: FAILED")
+
+            for error in last_errors:
+                print("   -", error)
+
+            if attempt < MAX_VALIDATION_ATTEMPTS:
+                print(
+                    "♻️ Regenerating a new question..."
+                )
+
+        return {
+            "status": "error",
+            "action": "generate",
+            "question": None,
+            "message": (
+                "AI failed to generate a valid question "
+                "after maximum validation attempts."
+            ),
+            "validation_errors": last_errors,
+            "generation_attempts": MAX_VALIDATION_ATTEMPTS
+        }
+
+    # -----------------------------------------
+    # ASK
+    # -----------------------------------------
+
+    if action == "ask":
+
+        return {
+            "status": "waiting",
+            "action": "ask",
+            "question": None,
+            "message": (
+                "Please provide a topic, company, "
+                "or search request."
+            )
+        }
+
+    # -----------------------------------------
+    # UNKNOWN ACTION
+    # -----------------------------------------
+
+    return {
+        "status": "error",
+        "action": action,
+        "question": None,
+        "message": f"Unknown agent action: {action}"
+    }
+
+
+def show_decision(decision):
+    """
+    Display the agent's decision.
+    """
+
+    print("\n🤖 AptitudeMind Agent")
+    print("---------------------")
+    print("Action:", decision["action"])
+    print("Filters:", decision["filters"])
+    print("Questions found:", len(decision["questions"]))
+
+
+def show_execution_result(result):
+    """
+    Display execution result.
+    """
+
+    print("\n⚙️ Execution Result")
+    print("-------------------")
+    print("Status:", result["status"])
+    print("Action:", result["action"])
+    print("Message:", result["message"])
+
+    if result.get("generation_attempts"):
         print(
-            "\n✅ Questions available:",
-            len(decision["questions"])
+            "Generation attempts:",
+            result["generation_attempts"]
         )
 
+    if result.get("question"):
 
-# ============================================================
-# Test Agent
-# ============================================================
+        print("\n📚 Question:")
+        print(result["question"]["question"])
+
+        print(
+            "\nTopic:",
+            result["question"]["topic"]
+        )
+
+        print(
+            "Difficulty:",
+            result["question"]["difficulty"]
+        )
+
+        print(
+            "Company:",
+            result["question"]["company"]
+        )
+
+        print(
+            "Source:",
+            result["question"]["source"]
+        )
+
+    if result.get("validation_errors"):
+
+        print("\n⚠️ Validation Errors:")
+
+        for error in result["validation_errors"]:
+            print("-", error)
+
 
 if __name__ == "__main__":
 
-    print("🧠 AptitudeMind Agent Decision System")
+    print("🧠 AptitudeMind Agent")
 
     query = input(
-        "\n🔎 Enter request: "
+        "\n🔎 Enter your request: "
     )
 
-    decision = decide_action(query=query)
+    decision = decide_action(
+        query=query
+    )
 
     show_decision(decision)
+
+    result = execute_decision(
+        decision
+    )
+
+    show_execution_result(result)
