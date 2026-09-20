@@ -189,6 +189,24 @@ def validate_question(question_data):
             )
         )
 
+    if topic == "Profit":
+
+        errors.extend(
+            validate_profit_loss_question(
+                question_data,
+                expected_topic="Profit"
+            )
+        )
+
+    if topic == "Loss":
+
+        errors.extend(
+            validate_profit_loss_question(
+                question_data,
+                expected_topic="Loss"
+            )
+        )
+
     return {
         "valid": len(errors) == 0,
         "errors": errors
@@ -803,6 +821,111 @@ def format_number(value):
 
 
 # ============================================================
+# PROFIT / LOSS VALIDATION
+# ============================================================
+
+def validate_profit_loss_question(
+    question_data,
+    expected_topic
+):
+    """
+    Validate Profit and Loss questions using the structured
+    parameters produced by the question generator.
+
+    Rules:
+        Profit -> selling price must be greater than cost price.
+        Loss   -> selling price must be less than cost price.
+
+    The validation is deterministic and does not rely on
+    interpreting the wording of the question.
+    """
+
+    errors = []
+
+    parameters = question_data.get("parameters")
+
+    if not isinstance(parameters, dict):
+        errors.append(
+            f"{expected_topic} question requires a "
+            "'parameters' dictionary."
+        )
+        return errors
+
+    cost_price = parameters.get("cost_price")
+    selling_price = parameters.get("selling_price")
+
+    if cost_price is None:
+        errors.append(
+            f"{expected_topic} question requires 'cost_price'."
+        )
+
+    if selling_price is None:
+        errors.append(
+            f"{expected_topic} question requires 'selling_price'."
+        )
+
+    if errors:
+        return errors
+
+    try:
+        cost_price = float(cost_price)
+        selling_price = float(selling_price)
+    except (TypeError, ValueError):
+        errors.append(
+            f"{expected_topic} question has invalid "
+            "cost_price or selling_price."
+        )
+        return errors
+
+    if cost_price <= 0:
+        errors.append(
+            "Cost price must be greater than zero."
+        )
+
+    if selling_price <= 0:
+        errors.append(
+            "Selling price must be greater than zero."
+        )
+
+    if errors:
+        return errors
+
+    if expected_topic == "Profit":
+
+        if selling_price <= cost_price:
+            if selling_price == cost_price:
+                errors.append(
+                    "Profit question is mathematically invalid: "
+                    "selling price equals cost price, so there is "
+                    "no profit."
+                )
+            else:
+                errors.append(
+                    "Profit question is mathematically invalid: "
+                    "selling price is less than cost price, so "
+                    "the transaction represents a loss."
+                )
+
+    elif expected_topic == "Loss":
+
+        if selling_price >= cost_price:
+            if selling_price == cost_price:
+                errors.append(
+                    "Loss question is mathematically invalid: "
+                    "selling price equals cost price, so there is "
+                    "no loss."
+                )
+            else:
+                errors.append(
+                    "Loss question is mathematically invalid: "
+                    "selling price is greater than cost price, so "
+                    "the transaction represents a profit."
+                )
+
+    return errors
+
+
+# ============================================================
 # PERCENTAGE VALIDATION
 # ============================================================
 
@@ -906,6 +1029,170 @@ if __name__ == "__main__":
     # Test 1
     # --------------------------------------------------------
 
+    valid_profit_question = {
+        "question":
+            "A product costs 800 and is sold at a profit of 15%. "
+            "What is the selling price?",
+        "topic":
+            "Profit",
+        "difficulty":
+            "Easy",
+        "company":
+            "TCS",
+        "parameters": {
+            "cost_price": 800,
+            "profit_percentage": 15,
+            "selling_price": 920
+        },
+        "options": [
+            "900",
+            "920",
+            "940",
+            "960"
+        ]
+    }
+
+    print(
+        "\nTest 1: Valid Profit Question"
+    )
+
+    result = validate_question(
+        valid_profit_question
+    )
+
+    show_validation(
+        result
+    )
+
+    assert result["valid"] is True
+
+    # --------------------------------------------------------
+    # Test 2
+    # --------------------------------------------------------
+
+    invalid_profit_question = {
+        "question":
+            "A product costs 800 and is sold at a profit of 15%. "
+            "What is the selling price?",
+        "topic":
+            "Profit",
+        "difficulty":
+            "Easy",
+        "company":
+            "TCS",
+        "parameters": {
+            "cost_price": 800,
+            "profit_percentage": 15,
+            "selling_price": 700
+        },
+        "options": [
+            "700",
+            "800",
+            "900",
+            "1000"
+        ]
+    }
+
+    print(
+        "\nTest 2: Invalid Profit Question"
+    )
+
+    result = validate_question(
+        invalid_profit_question
+    )
+
+    show_validation(
+        result
+    )
+
+    assert result["valid"] is False
+
+    # --------------------------------------------------------
+    # Test 3
+    # --------------------------------------------------------
+
+    valid_loss_question = {
+        "question":
+            "A product costs 800 and is sold at a loss of 10%. "
+            "What is the selling price?",
+        "topic":
+            "Loss",
+        "difficulty":
+            "Easy",
+        "company":
+            "TCS",
+        "parameters": {
+            "cost_price": 800,
+            "loss_percentage": 10,
+            "selling_price": 720
+        },
+        "options": [
+            "700",
+            "720",
+            "740",
+            "760"
+        ]
+    }
+
+    print(
+        "\nTest 3: Valid Loss Question"
+    )
+
+    result = validate_question(
+        valid_loss_question
+    )
+
+    show_validation(
+        result
+    )
+
+    assert result["valid"] is True
+
+    # --------------------------------------------------------
+    # Test 4
+    # --------------------------------------------------------
+
+    invalid_loss_question = {
+        "question":
+            "A box of 50 pencils was sold for $60, "
+            "but the cost price was $55. What is the loss percentage?",
+        "topic":
+            "Loss",
+        "difficulty":
+            "Easy",
+        "company":
+            "TCS",
+        "parameters": {
+            "total_items": 50,
+            "selling_price": 60,
+            "cost_price": 55
+        },
+        "options": [
+            "2%",
+            "5%",
+            "10%",
+            "15%"
+        ]
+    }
+
+    print(
+        "\nTest 4: Invalid Loss Question"
+    )
+
+    result = validate_question(
+        invalid_loss_question
+    )
+
+    show_validation(
+        result
+    )
+
+    assert result["valid"] is False
+
+    # --------------------------------------------------------
+    # Test 5
+    # --------------------------------------------------------
+
     valid_question = {
 
         "question":
@@ -930,7 +1217,7 @@ if __name__ == "__main__":
     }
 
     print(
-        "\nTest 1: Valid Percentage Question"
+        "\nTest 9: Valid Percentage Question"
     )
 
     result = validate_question(
@@ -965,7 +1252,7 @@ if __name__ == "__main__":
     }
 
     print(
-        "\nTest 2: Invalid Question"
+        "\nTest 10: Invalid Question"
     )
 
     result = validate_question(
@@ -1002,7 +1289,7 @@ if __name__ == "__main__":
     }
 
     print(
-        "\nTest 3: Ambiguous Algebra Question"
+        "\nTest 11: Ambiguous Algebra Question"
     )
 
     result = validate_question(
@@ -1037,7 +1324,7 @@ if __name__ == "__main__":
     }
 
     print(
-        "\nTest 4: Mathematically Inconsistent "
+        "\nTest 8: Mathematically Inconsistent "
         "Algebra Question"
     )
 

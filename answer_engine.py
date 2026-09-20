@@ -691,6 +691,203 @@ def solve_time(question_data):
 
 
 # ============================================================
+# Quadratic Equation
+# ============================================================
+
+def parse_numeric_option(option):
+    """
+    Convert common numeric option formats into a float.
+
+    Supports:
+        1
+        -3
+        0.5
+        1/2
+        -3/2
+    """
+    if isinstance(option, (int, float)):
+        return float(option)
+
+    if not isinstance(option, str):
+        return None
+
+    value = option.strip().replace("−", "-")
+
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    if "/" in value:
+        parts = value.split("/")
+        if len(parts) == 2:
+            try:
+                numerator = float(parts[0].strip())
+                denominator = float(parts[1].strip())
+
+                if denominator == 0:
+                    return None
+
+                return numerator / denominator
+            except ValueError:
+                return None
+
+    return None
+
+
+def find_matching_root_options(roots, options):
+    """
+    Find every option that matches any real root.
+
+    Returns a list of option numbers.
+    """
+    if not isinstance(options, list):
+        return []
+
+    matching_options = []
+
+    for index, option in enumerate(options, start=1):
+        option_value = parse_numeric_option(option)
+
+        if option_value is None:
+            continue
+
+        for root in roots:
+            if approximately_equal(root, option_value):
+                matching_options.append(index)
+                break
+
+    return matching_options
+
+
+def solve_quadratic_equation(question_data):
+    """
+    Solve a quadratic equation:
+
+        ax² + bx + c = 0
+
+    Expected internal data:
+
+    {
+        "topic": "Algebra",
+        "type": "QUADRATIC_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": -3
+        },
+        "options": ["1/2", "-3/2", "-1", "3/2"]
+    }
+    """
+
+    parameters = question_data.get("parameters", {})
+
+    if not isinstance(parameters, dict):
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message="Quadratic equation requires a 'parameters' dictionary."
+        )
+
+    a = parameters.get("a")
+    b = parameters.get("b")
+    c = parameters.get("c")
+    options = question_data.get("options", [])
+
+    if a is None or b is None or c is None:
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message="Quadratic equation requires 'a', 'b', and 'c'."
+        )
+
+    try:
+        a = float(a)
+        b = float(b)
+        c = float(c)
+    except (TypeError, ValueError):
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message="Quadratic coefficients must be numeric."
+        )
+
+    if a == 0:
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message="Coefficient 'a' cannot be zero for a quadratic equation."
+        )
+
+    discriminant = b ** 2 - 4 * a * c
+
+    # No real roots.
+    if discriminant < 0:
+        explanation = (
+            f"Discriminant = b² - 4ac = {discriminant}. "
+            "Since the discriminant is negative, the equation has no real roots."
+        )
+
+        return create_result(
+            status="success",
+            topic="Algebra",
+            calculated_answer="No real roots",
+            correct_answer=None,
+            explanation=explanation,
+            message="Quadratic equation verified: no real roots."
+        )
+
+    # One repeated real root.
+    if approximately_equal(discriminant, 0):
+        root = -b / (2 * a)
+        roots = [root]
+    else:
+        sqrt_discriminant = discriminant ** 0.5
+        root1 = (-b + sqrt_discriminant) / (2 * a)
+        root2 = (-b - sqrt_discriminant) / (2 * a)
+        roots = [root1, root2]
+
+    matching_options = find_matching_root_options(roots, options)
+
+    if not matching_options:
+        return create_result(
+            status="error",
+            topic="Algebra",
+            calculated_answer=roots,
+            correct_answer=None,
+            explanation=(
+                f"Discriminant = {discriminant}. "
+                f"Real roots = {roots}. "
+                "None of the provided options matches a calculated root."
+            ),
+            message="Quadratic answer does not match any provided option."
+        )
+
+    if len(matching_options) == 1:
+        correct_answer = matching_options[0]
+    else:
+        # A quadratic may have two correct root options.
+        correct_answer = matching_options
+
+    root_text = ", ".join(str(round(root, 10)) for root in roots)
+
+    explanation = (
+        f"Discriminant = b² - 4ac = {discriminant}. "
+        f"Roots = {root_text}. "
+        f"Matching option(s) = {matching_options}."
+    )
+
+    return create_result(
+        status="success",
+        topic="Algebra",
+        calculated_answer=roots,
+        correct_answer=correct_answer,
+        explanation=explanation,
+        message="Quadratic equation answer verified successfully."
+    )
+
+
+# ============================================================
 # Main Answer Engine
 # ============================================================
 
@@ -763,6 +960,27 @@ def verify_answer(question_data):
             message=(
                 "Time-Speed-Distance question requires "
                 "'question_type': 'distance', 'speed', or 'time'."
+            )
+        )
+
+    if normalized_topic in {
+        "algebra",
+        "quadratic",
+        "quadratic equation",
+    }:
+        question_type = str(
+            question_data.get("type", "")
+        ).upper()
+
+        if question_type == "QUADRATIC_EQUATION":
+            return solve_quadratic_equation(question_data)
+
+        return create_result(
+            status="error",
+            topic=topic,
+            message=(
+                "Algebra question requires "
+                "'type': 'QUADRATIC_EQUATION'."
             )
         )
 
@@ -1017,13 +1235,52 @@ def run_tests():
     print("✅ Test 8 passed.")
 
     # --------------------------------------------------------
-    # Test 9 - Unsupported topic
+    # Test 9 - Quadratic Equation
     # --------------------------------------------------------
 
-    print("\nTest 9: Unsupported topic")
+    print("\nTest 9: Quadratic Equation")
 
     question = {
         "topic": "Algebra",
+        "type": "QUADRATIC_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": -3
+        },
+        "options": [
+            "1/2",
+            "-3/2",
+            "-1",
+            "3/2"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert result["correct_answer"] == 1
+    assert approximately_equal(result["calculated_answer"][0], 0.5)
+    assert approximately_equal(result["calculated_answer"][1], -3)
+
+    print("✅ Test 9 passed.")
+
+    # --------------------------------------------------------
+    # Test 10 - Quadratic Wrong Options
+    # --------------------------------------------------------
+
+    print("\nTest 10: Quadratic Wrong Options")
+
+    question = {
+        "topic": "Algebra",
+        "type": "QUADRATIC_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": -3
+        },
         "options": [
             "1",
             "2",
@@ -1036,15 +1293,16 @@ def run_tests():
 
     print(result)
 
-    assert result["status"] == "unsupported"
+    assert result["status"] == "error"
+    assert result["correct_answer"] is None
 
-    print("✅ Test 9 passed.")
+    print("✅ Test 11 passed.")
 
     # --------------------------------------------------------
-    # Test 10 - Wrong options
+    # Test 11 - No matching Percentage option
     # --------------------------------------------------------
 
-    print("\nTest 10: No matching option")
+    print("\nTest 11: No matching Percentage option")
 
     question = {
         "topic": "Percentage",
