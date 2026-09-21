@@ -1,11 +1,10 @@
-# ============================================================
-# AptitudeMind - AI Question Generator
-# ============================================================
 
 import json
+import math
 import ollama
 
 from validator import validate_question
+from answer_engine import verify_answer
 
 
 # ============================================================
@@ -13,7 +12,7 @@ from validator import validate_question
 # ============================================================
 
 MODEL_NAME = "llama3.2:3b"
-MAX_GENERATION_ATTEMPTS = 3
+MAX_GENERATION_ATTEMPTS = 5
 
 
 # ============================================================
@@ -24,52 +23,54 @@ def generate_raw_question(topic, difficulty, company=None):
 
     company_text = company if company else "general placement"
 
-    prompt = f"""
+    prompt = """
 You are an expert aptitude question generator for a placement
 preparation platform.
 
-Create ONE {difficulty}-level aptitude question.
+Create ONE aptitude question.
 
 Requested Topic:
-{topic}
+TOPIC_PLACEHOLDER
+
+Requested Difficulty:
+DIFFICULTY_PLACEHOLDER
 
 Company Style:
-{company_text}
+COMPANY_PLACEHOLDER
 
 Return ONLY valid JSON.
 
 Required JSON format:
 
-{{
+{
     "question": "question text",
-
     "type": "QUESTION_TYPE",
-
-    "parameters": {{
+    "parameters": {
         "parameter_name": "parameter_value"
-    }},
-
+    },
     "options": [
         "option 1",
         "option 2",
         "option 3",
         "option 4"
     ]
-}}
+}
 
-IMPORTANT:
+============================================================
+GENERAL RULES
+============================================================
 
 1. Create exactly ONE question.
 
 2. The question must clearly belong to the requested topic.
 
-3. The question must match the requested difficulty.
+3. Match the requested difficulty.
 
-4. The question must have exactly ONE correct answer.
+4. Provide exactly FOUR options.
 
-5. Provide exactly FOUR options.
+5. There must be exactly one correct answer.
 
-6. The correct answer MUST be present in the four options.
+6. The correct answer MUST be present in the options.
 
 7. The other three options must be plausible distractors.
 
@@ -79,144 +80,269 @@ IMPORTANT:
 
 10. Do NOT provide an answer field.
 
-11. The "type" field must describe the mathematical question type.
+11. The "type" field must describe the mathematical
+    question type.
 
-12. The "parameters" field MUST contain the numerical
-    information required to independently calculate the answer.
+12. The "parameters" field MUST contain all numerical
+    information required for a deterministic Python program
+    to calculate the answer.
 
-13. The parameters must be sufficient for a deterministic
-    Python program to calculate the correct answer.
+13. The question text MUST match the parameters exactly.
 
-14. Do not put calculations inside the parameters.
+14. Do not put calculated answers inside parameters.
 
-15. Do not use random or missing parameter values.
+15. Return JSON only.
 
-16. Keep parameter names simple and descriptive.
+============================================================
+ALGEBRA RULES
+============================================================
 
-17. Return JSON only.
+If the topic is Algebra, use ONLY:
+
+1. LINEAR_EQUATION
+2. QUADRATIC_EQUATION
 
 ------------------------------------------------------------
-EXAMPLE 1 - PERCENTAGE
+LINEAR_EQUATION
 ------------------------------------------------------------
 
-{{
+Use:
+
+ax + b = c
+
+Parameters:
+
+{
+    "a": number,
+    "b": number,
+    "c": number
+}
+
+Rules:
+
+- a must not be zero.
+- Use integer coefficients.
+- Prefer small coefficients.
+- Prefer an integer value of x.
+- The correct x MUST appear in the options.
+- The equation and parameters MUST match.
+
+Example:
+
+{
+    "question": "Solve for x: 3x + 4 = 13",
+    "type": "LINEAR_EQUATION",
+    "parameters": {
+        "a": 3,
+        "b": 4,
+        "c": 13
+    },
+    "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+    ]
+}
+
+------------------------------------------------------------
+QUADRATIC_EQUATION
+------------------------------------------------------------
+
+Use:
+
+ax^2 + bx + c = 0
+
+Parameters:
+
+{
+    "a": number,
+    "b": number,
+    "c": number
+}
+
+CRITICAL RULES:
+
+- a must not be zero.
+- Use integer coefficients.
+- Use small or reasonable coefficients.
+- The quadratic MUST have real roots.
+- Prefer integer roots.
+- Simple fractions such as 1/2 and -1/2 are allowed.
+- DO NOT create irrational roots.
+- DO NOT create quadratics with no real roots.
+- DO NOT use complicated decimal roots.
+- The equation and parameters MUST match.
+- The correct root MUST appear in the options.
+- If asking for both roots, both roots must appear.
+
+GOOD EXAMPLE:
+
+{
+    "question": "Solve for x: 2x^2 - 7x + 3 = 0",
+    "type": "QUADRATIC_EQUATION",
+    "parameters": {
+        "a": 2,
+        "b": -7,
+        "c": 3
+    },
+    "options": [
+        "3",
+        "1/2",
+        "2",
+        "4"
+    ]
+}
+
+The roots are:
+
+3 and 1/2
+
+============================================================
+ALGEBRA DIFFICULTY
+============================================================
+
+Hard difficulty does NOT mean irrational or unnecessarily
+complicated mathematics.
+
+Increase difficulty through:
+
+- multi-step wording
+- application-style questions
+- slightly larger coefficients
+- reasoning
+
+Keep the underlying mathematics clean and deterministic.
+
+============================================================
+NON-ALGEBRA EXAMPLES
+============================================================
+
+PERCENTAGE:
+
+{
     "question": "What is 20% of 200?",
-
     "type": "PERCENTAGE",
-
-    "parameters": {{
+    "parameters": {
         "value": 200,
         "percentage": 20
-    }},
-
+    },
     "options": [
         "20",
         "40",
         "60",
         "80"
     ]
-}}
+}
 
-------------------------------------------------------------
-EXAMPLE 2 - PROFIT
-------------------------------------------------------------
+PROFIT:
 
-{{
+{
     "question": "A product costs 1000 and is sold at a profit of 20%. What is the selling price?",
-
     "type": "PROFIT",
-
-    "parameters": {{
+    "parameters": {
         "cost_price": 1000,
         "profit_percentage": 20
-    }},
-
+    },
     "options": [
         "1100",
         "1150",
         "1200",
         "1250"
     ]
-}}
+}
 
-------------------------------------------------------------
-EXAMPLE 3 - AVERAGE
-------------------------------------------------------------
+AVERAGE:
 
-{{
+{
     "question": "What is the average of 10, 20 and 30?",
-
     "type": "AVERAGE",
-
-    "parameters": {{
+    "parameters": {
         "numbers": [10, 20, 30]
-    }},
-
+    },
     "options": [
         "15",
         "20",
         "25",
         "30"
     ]
-}}
+}
 
-------------------------------------------------------------
-EXAMPLE 4 - SIMPLE INTEREST
-------------------------------------------------------------
+SIMPLE INTEREST:
 
-{{
+{
     "question": "Find the simple interest on 1000 at 10% per annum for 2 years.",
-
     "type": "SIMPLE_INTEREST",
-
-    "parameters": {{
+    "parameters": {
         "principal": 1000,
         "rate": 10,
         "time": 2
-    }},
-
+    },
     "options": [
         "100",
         "150",
         "200",
         "250"
     ]
-}}
+}
 
-------------------------------------------------------------
-EXAMPLE 5 - TIME SPEED DISTANCE
-------------------------------------------------------------
+DISTANCE:
 
-{{
+{
     "question": "A car travels at 60 km/h for 2 hours. What distance does it cover?",
-
     "type": "DISTANCE",
-
-    "parameters": {{
+    "parameters": {
         "speed": 60,
         "time": 2
-    }},
-
+    },
     "options": [
         "100",
         "110",
         "120",
         "130"
     ]
-}}
+}
 
-------------------------------------------------------------
+============================================================
+FINAL REQUIREMENT
+============================================================
 
-Do not copy these examples.
+Create a NEW question.
 
-Create a NEW question based on:
+Topic:
+TOPIC_PLACEHOLDER
 
-Topic: {topic}
-Difficulty: {difficulty}
-Company: {company_text}
+Difficulty:
+DIFFICULTY_PLACEHOLDER
 
-Return ONLY JSON.
+Company:
+COMPANY_PLACEHOLDER
+
+Return ONLY valid JSON.
 """
+
+    # --------------------------------------------------------
+    # Insert runtime values safely
+    # --------------------------------------------------------
+
+    prompt = prompt.replace(
+        "TOPIC_PLACEHOLDER",
+        str(topic)
+    )
+
+    prompt = prompt.replace(
+        "DIFFICULTY_PLACEHOLDER",
+        str(difficulty)
+    )
+
+    prompt = prompt.replace(
+        "COMPANY_PLACEHOLDER",
+        str(company_text)
+    )
+
+    # --------------------------------------------------------
+    # Call Ollama
+    # --------------------------------------------------------
 
     response = ollama.chat(
         model=MODEL_NAME,
@@ -312,6 +438,176 @@ def parse_question_response(
         )
 
     # --------------------------------------------------------
+    # Algebra structured validation
+    # --------------------------------------------------------
+
+    if (
+        topic.lower() == "algebra"
+        and isinstance(question_type, str)
+    ):
+
+        normalized_type = question_type.strip().upper()
+
+        allowed_types = {
+            "LINEAR_EQUATION",
+            "QUADRATIC_EQUATION"
+        }
+
+        if normalized_type not in allowed_types:
+
+            errors.append(
+                "Algebra question type must be "
+                "LINEAR_EQUATION or QUADRATIC_EQUATION."
+            )
+
+        else:
+
+            required_parameters = [
+                "a",
+                "b",
+                "c"
+            ]
+
+            for parameter in required_parameters:
+
+                if parameter not in parameters:
+
+                    errors.append(
+                        f"Algebra parameter "
+                        f"'{parameter}' is missing."
+                    )
+
+            # ------------------------------------------------
+            # Linear validation
+            # ------------------------------------------------
+
+            if normalized_type == "LINEAR_EQUATION":
+
+                try:
+
+                    a = float(
+                        parameters.get("a", 0)
+                    )
+
+                    if a == 0:
+
+                        errors.append(
+                            "Linear coefficient 'a' "
+                            "cannot be zero."
+                        )
+
+                except (TypeError, ValueError):
+
+                    errors.append(
+                        "Linear coefficient 'a' "
+                        "must be numeric."
+                    )
+
+            # ------------------------------------------------
+            # Quadratic validation
+            # ------------------------------------------------
+
+            if normalized_type == "QUADRATIC_EQUATION":
+
+                try:
+
+                    a = float(
+                        parameters.get("a", 0)
+                    )
+
+                    b = float(
+                        parameters.get("b", 0)
+                    )
+
+                    c = float(
+                        parameters.get("c", 0)
+                    )
+
+                    if a == 0:
+
+                        errors.append(
+                            "Quadratic coefficient 'a' "
+                            "cannot be zero."
+                        )
+
+                    else:
+
+                        discriminant = (
+                            b * b
+                            - 4 * a * c
+                        )
+
+                        # ------------------------------------
+                        # Reject no-real-root equations
+                        # ------------------------------------
+
+                        if discriminant < 0:
+
+                            errors.append(
+                                "Quadratic must have real roots."
+                            )
+
+                        else:
+
+                            sqrt_d = math.sqrt(
+                                discriminant
+                            )
+
+                            root1 = (
+                                -b + sqrt_d
+                            ) / (2 * a)
+
+                            root2 = (
+                                -b - sqrt_d
+                            ) / (2 * a)
+
+                            # --------------------------------
+                            # Accept integer or half roots
+                            # --------------------------------
+
+                            def is_clean_root(root):
+
+                                integer_root = math.isclose(
+                                    root,
+                                    round(root),
+                                    abs_tol=1e-9
+                                )
+
+                                half_root = math.isclose(
+                                    root * 2,
+                                    round(root * 2),
+                                    abs_tol=1e-9
+                                )
+
+                                return (
+                                    integer_root
+                                    or half_root
+                                )
+
+                            if not is_clean_root(root1):
+
+                                errors.append(
+                                    "Quadratic root is not a "
+                                    "clean integer or simple "
+                                    "half fraction."
+                                )
+
+                            if not is_clean_root(root2):
+
+                                errors.append(
+                                    "Quadratic root is not a "
+                                    "clean integer or simple "
+                                    "half fraction."
+                                )
+
+                except (TypeError, ValueError):
+
+                    errors.append(
+                        "Quadratic coefficients must "
+                        "be numeric."
+                    )
+
+    # --------------------------------------------------------
     # Stop if basic structure is invalid
     # --------------------------------------------------------
 
@@ -361,9 +657,17 @@ def parse_question_response(
 
 def generate_question(
     topic,
-    difficulty,
+    difficulty="Easy",
     company=None
 ):
+
+    print(
+        "\n🤖 AptitudeMind AI Question Generator"
+    )
+
+    print(
+        "====================================="
+    )
 
     for attempt in range(
         1,
@@ -376,91 +680,107 @@ def generate_question(
         )
 
         # ----------------------------------------------------
-        # Ask Ollama
+        # Generate
         # ----------------------------------------------------
 
-        raw_response = generate_raw_question(
-
+        raw_question = generate_raw_question(
             topic=topic,
-
             difficulty=difficulty,
-
             company=company
         )
 
         # ----------------------------------------------------
-        # Parse response
+        # Parse
         # ----------------------------------------------------
 
         parsed = parse_question_response(
-
-            content=raw_response,
-
+            content=raw_question,
             topic=topic,
-
             difficulty=difficulty,
-
             company=company
         )
-
-        # ----------------------------------------------------
-        # Parsing failed
-        # ----------------------------------------------------
 
         if not parsed["valid"]:
 
             print(
-                "❌ AI response failed "
-                "generator-level checks."
+                "❌ Question failed basic parsing."
             )
 
             for error in parsed["errors"]:
 
                 print(
-                    f"   - {error}"
+                    "   -",
+                    error
+                )
+
+            continue
+
+        question_data = parsed["question_data"]
+
+        # ----------------------------------------------------
+        # Validator
+        # ----------------------------------------------------
+
+        validation = validate_question(
+            question_data
+        )
+
+        if not validation["valid"]:
+
+            print(
+                "❌ Question failed validation."
+            )
+
+            for error in validation["errors"]:
+
+                print(
+                    "   -",
+                    error
                 )
 
             continue
 
         # ----------------------------------------------------
-        # Extract question
+        # Answer Engine
         # ----------------------------------------------------
 
-        question_data = parsed["question_data"]
-
-        # ----------------------------------------------------
-        # Existing Validator
-        # ----------------------------------------------------
-
-        validation_result = validate_question(
+        verification = verify_answer(
             question_data
         )
 
-        if validation_result["valid"]:
+        if verification["status"] != "success":
 
             print(
-                "✅ Question passed validation."
+                "❌ Answer Engine verification failed."
             )
 
-            return question_data
+            print(
+                "   -",
+                verification.get(
+                    "message",
+                    "Unknown verification error"
+                )
+            )
+
+            continue
 
         # ----------------------------------------------------
-        # Validation failed
+        # Success
         # ----------------------------------------------------
 
         print(
-            "❌ Question failed validation."
+            "✅ Question passed validation."
         )
 
-        for error in validation_result["errors"]:
+        print(
+            "✅ Answer Engine verification passed."
+        )
 
-            print(
-                f"   - {error}"
-            )
+        return question_data
 
-    # ========================================================
-    # Maximum attempts reached
-    # ========================================================
+    # --------------------------------------------------------
+    # Generation failed
+    # --------------------------------------------------------
 
     print(
         "\n⚠️ Unable to generate a valid question "
@@ -539,26 +859,17 @@ def display_question(question):
 
 if __name__ == "__main__":
 
-    print(
-        "🤖 AptitudeMind AI Question Generator"
-    )
-
-    print(
-        "====================================="
-    )
-
     question = generate_question(
-
         topic="Algebra",
-
         difficulty="Hard",
-
         company="TCS"
     )
 
     if question:
 
-        display_question(question)
+        display_question(
+            question
+        )
 
     else:
 
