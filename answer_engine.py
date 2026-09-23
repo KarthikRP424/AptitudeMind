@@ -1,3 +1,4 @@
+
 """
 AptitudeMind - Answer Engine
 
@@ -15,6 +16,9 @@ Supported topics:
 - Average
 - Simple Interest
 - Time-Speed-Distance
+- Algebra
+    - Linear Equation
+    - Quadratic Equation
 """
 
 
@@ -691,7 +695,7 @@ def solve_time(question_data):
 
 
 # ============================================================
-# Quadratic Equation
+# Algebra - Numeric Option Parser
 # ============================================================
 
 def parse_numeric_option(option):
@@ -705,6 +709,7 @@ def parse_numeric_option(option):
         1/2
         -3/2
     """
+
     if isinstance(option, (int, float)):
         return float(option)
 
@@ -715,21 +720,33 @@ def parse_numeric_option(option):
 
     try:
         return float(value)
+
     except ValueError:
         pass
 
     if "/" in value:
+
         parts = value.split("/")
+
         if len(parts) == 2:
+
             try:
-                numerator = float(parts[0].strip())
-                denominator = float(parts[1].strip())
+
+                numerator = float(
+                    parts[0].strip()
+                )
+
+                denominator = float(
+                    parts[1].strip()
+                )
 
                 if denominator == 0:
                     return None
 
                 return numerator / denominator
+
             except ValueError:
+
                 return None
 
     return None
@@ -741,24 +758,206 @@ def find_matching_root_options(roots, options):
 
     Returns a list of option numbers.
     """
+
     if not isinstance(options, list):
         return []
 
     matching_options = []
 
-    for index, option in enumerate(options, start=1):
-        option_value = parse_numeric_option(option)
+    for index, option in enumerate(
+        options,
+        start=1
+    ):
+
+        option_value = parse_numeric_option(
+            option
+        )
 
         if option_value is None:
             continue
 
         for root in roots:
-            if approximately_equal(root, option_value):
+
+            if approximately_equal(
+                root,
+                option_value
+            ):
+
                 matching_options.append(index)
                 break
 
     return matching_options
 
+
+# ============================================================
+# Algebra - Linear Equation
+# ============================================================
+
+def solve_linear_equation(question_data):
+    """
+    Solve a linear equation:
+
+        ax + b = c
+
+    Expected internal data:
+
+    {
+        "topic": "Algebra",
+        "type": "LINEAR_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": 11
+        },
+        "options": [
+            "2",
+            "3",
+            "4",
+            "5"
+        ]
+    }
+
+    Formula:
+
+        ax + b = c
+
+        ax = c - b
+
+        x = (c - b) / a
+    """
+
+    parameters = question_data.get(
+        "parameters",
+        {}
+    )
+
+    if not isinstance(parameters, dict):
+
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message=(
+                "Linear equation requires "
+                "a 'parameters' dictionary."
+            )
+        )
+
+    a = parameters.get("a")
+    b = parameters.get("b")
+    c = parameters.get("c")
+
+    options = question_data.get(
+        "options",
+        []
+    )
+
+    if (
+        a is None
+        or b is None
+        or c is None
+    ):
+
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message=(
+                "Linear equation requires "
+                "'a', 'b', and 'c'."
+            )
+        )
+
+    try:
+
+        a = float(a)
+        b = float(b)
+        c = float(c)
+
+    except (TypeError, ValueError):
+
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message=(
+                "Linear equation coefficients "
+                "must be numeric."
+            )
+        )
+
+    if approximately_equal(a, 0):
+
+        return create_result(
+            status="error",
+            topic="Algebra",
+            message=(
+                "Coefficient 'a' cannot be zero "
+                "for a standard linear equation."
+            )
+        )
+
+    answer = (c - b) / a
+
+    correct_option = None
+
+    for index, option in enumerate(
+        options,
+        start=1
+    ):
+
+        option_value = parse_numeric_option(
+            option
+        )
+
+        if option_value is None:
+            continue
+
+        if approximately_equal(
+            answer,
+            option_value
+        ):
+
+            correct_option = index
+            break
+
+    if correct_option is None:
+
+        return create_result(
+            status="error",
+            topic="Algebra",
+            calculated_answer=answer,
+            correct_answer=None,
+            explanation=(
+                f"x = (c - b) / a "
+                f"= ({c} - {b}) / {a} "
+                f"= {answer}. "
+                "None of the provided options "
+                "matches the calculated value."
+            ),
+            message=(
+                "Linear equation answer does not "
+                "match any provided option."
+            )
+        )
+
+    explanation = (
+        f"ax + b = c\n"
+        f"x = (c - b) / a\n"
+        f"x = ({c} - {b}) / {a}\n"
+        f"x = {answer}"
+    )
+
+    return create_result(
+        status="success",
+        topic="Algebra",
+        calculated_answer=answer,
+        correct_answer=correct_option,
+        explanation=explanation,
+        message="Linear equation answer verified successfully."
+    )
+
+
+# ============================================================
+# Algebra - Quadratic Equation
+# ============================================================
 
 def solve_quadratic_equation(question_data):
     """
@@ -780,32 +979,54 @@ def solve_quadratic_equation(question_data):
     }
     """
 
-    parameters = question_data.get("parameters", {})
+    parameters = question_data.get(
+        "parameters",
+        {}
+    )
 
     if not isinstance(parameters, dict):
+
         return create_result(
             status="error",
             topic="Algebra",
-            message="Quadratic equation requires a 'parameters' dictionary."
+            message=(
+                "Quadratic equation requires "
+                "a 'parameters' dictionary."
+            )
         )
 
     a = parameters.get("a")
     b = parameters.get("b")
     c = parameters.get("c")
-    options = question_data.get("options", [])
 
-    if a is None or b is None or c is None:
+    options = question_data.get(
+        "options",
+        []
+    )
+
+    if (
+        a is None
+        or b is None
+        or c is None
+    ):
+
         return create_result(
             status="error",
             topic="Algebra",
-            message="Quadratic equation requires 'a', 'b', and 'c'."
+            message=(
+                "Quadratic equation requires "
+                "'a', 'b', and 'c'."
+            )
         )
 
     try:
+
         a = float(a)
         b = float(b)
         c = float(c)
+
     except (TypeError, ValueError):
+
         return create_result(
             status="error",
             topic="Algebra",
@@ -813,19 +1034,31 @@ def solve_quadratic_equation(question_data):
         )
 
     if a == 0:
+
         return create_result(
             status="error",
             topic="Algebra",
-            message="Coefficient 'a' cannot be zero for a quadratic equation."
+            message=(
+                "Coefficient 'a' cannot be zero "
+                "for a quadratic equation."
+            )
         )
 
-    discriminant = b ** 2 - 4 * a * c
+    discriminant = (
+        b ** 2
+        - 4 * a * c
+    )
 
-    # No real roots.
+    # --------------------------------------------------------
+    # No real roots
+    # --------------------------------------------------------
+
     if discriminant < 0:
+
         explanation = (
             f"Discriminant = b² - 4ac = {discriminant}. "
-            "Since the discriminant is negative, the equation has no real roots."
+            "Since the discriminant is negative, "
+            "the equation has no real roots."
         )
 
         return create_result(
@@ -834,22 +1067,51 @@ def solve_quadratic_equation(question_data):
             calculated_answer="No real roots",
             correct_answer=None,
             explanation=explanation,
-            message="Quadratic equation verified: no real roots."
+            message=(
+                "Quadratic equation verified: "
+                "no real roots."
+            )
         )
 
-    # One repeated real root.
-    if approximately_equal(discriminant, 0):
-        root = -b / (2 * a)
-        roots = [root]
-    else:
-        sqrt_discriminant = discriminant ** 0.5
-        root1 = (-b + sqrt_discriminant) / (2 * a)
-        root2 = (-b - sqrt_discriminant) / (2 * a)
-        roots = [root1, root2]
+    # --------------------------------------------------------
+    # One repeated real root
+    # --------------------------------------------------------
 
-    matching_options = find_matching_root_options(roots, options)
+    if approximately_equal(
+        discriminant,
+        0
+    ):
+
+        root = -b / (2 * a)
+
+        roots = [root]
+
+    else:
+
+        sqrt_discriminant = (
+            discriminant ** 0.5
+        )
+
+        root1 = (
+            -b + sqrt_discriminant
+        ) / (2 * a)
+
+        root2 = (
+            -b - sqrt_discriminant
+        ) / (2 * a)
+
+        roots = [
+            root1,
+            root2
+        ]
+
+    matching_options = find_matching_root_options(
+        roots,
+        options
+    )
 
     if not matching_options:
+
         return create_result(
             status="error",
             topic="Algebra",
@@ -858,18 +1120,28 @@ def solve_quadratic_equation(question_data):
             explanation=(
                 f"Discriminant = {discriminant}. "
                 f"Real roots = {roots}. "
-                "None of the provided options matches a calculated root."
+                "None of the provided options "
+                "matches a calculated root."
             ),
-            message="Quadratic answer does not match any provided option."
+            message=(
+                "Quadratic answer does not match "
+                "any provided option."
+            )
         )
 
     if len(matching_options) == 1:
+
         correct_answer = matching_options[0]
+
     else:
+
         # A quadratic may have two correct root options.
         correct_answer = matching_options
 
-    root_text = ", ".join(str(round(root, 10)) for root in roots)
+    root_text = ", ".join(
+        str(round(root, 10))
+        for root in roots
+    )
 
     explanation = (
         f"Discriminant = b² - 4ac = {discriminant}. "
@@ -883,7 +1155,9 @@ def solve_quadratic_equation(question_data):
         calculated_answer=roots,
         correct_answer=correct_answer,
         explanation=explanation,
-        message="Quadratic equation answer verified successfully."
+        message=(
+            "Quadratic equation answer verified successfully."
+        )
     )
 
 
@@ -906,32 +1180,45 @@ def verify_answer(question_data):
             message="Question data must be a dictionary."
         )
 
-    topic = question_data.get("topic", "")
+    topic = question_data.get(
+        "topic",
+        ""
+    )
 
     normalized_topic = topic.strip().lower()
 
     if normalized_topic == "percentage":
 
-        return solve_percentage(question_data)
+        return solve_percentage(
+            question_data
+        )
 
     if normalized_topic == "profit":
 
-        return solve_profit(question_data)
+        return solve_profit(
+            question_data
+        )
 
     if normalized_topic == "loss":
 
-        return solve_loss(question_data)
+        return solve_loss(
+            question_data
+        )
 
     if normalized_topic == "average":
 
-        return solve_average(question_data)
+        return solve_average(
+            question_data
+        )
 
     if normalized_topic in {
         "simple interest",
         "simple_interest"
     }:
 
-        return solve_simple_interest(question_data)
+        return solve_simple_interest(
+            question_data
+        )
 
     if normalized_topic in {
         "time-speed-distance",
@@ -946,13 +1233,22 @@ def verify_answer(question_data):
         )
 
         if question_type == "distance":
-            return solve_distance(question_data)
+
+            return solve_distance(
+                question_data
+            )
 
         if question_type == "speed":
-            return solve_speed(question_data)
+
+            return solve_speed(
+                question_data
+            )
 
         if question_type == "time":
-            return solve_time(question_data)
+
+            return solve_time(
+                question_data
+            )
 
         return create_result(
             status="error",
@@ -968,19 +1264,33 @@ def verify_answer(question_data):
         "quadratic",
         "quadratic equation",
     }:
+
         question_type = str(
-            question_data.get("type", "")
+            question_data.get(
+                "type",
+                ""
+            )
         ).upper()
 
+        if question_type == "LINEAR_EQUATION":
+
+            return solve_linear_equation(
+                question_data
+            )
+
         if question_type == "QUADRATIC_EQUATION":
-            return solve_quadratic_equation(question_data)
+
+            return solve_quadratic_equation(
+                question_data
+            )
 
         return create_result(
             status="error",
             topic=topic,
             message=(
                 "Algebra question requires "
-                "'type': 'QUADRATIC_EQUATION'."
+                "'type': 'LINEAR_EQUATION' or "
+                "'QUADRATIC_EQUATION'."
             )
         )
 
@@ -1000,8 +1310,13 @@ def verify_answer(question_data):
 
 def run_tests():
 
-    print("\n🧪 AptitudeMind Answer Engine Tests")
-    print("=" * 60)
+    print(
+        "\n🧪 AptitudeMind Answer Engine Tests"
+    )
+
+    print(
+        "=" * 60
+    )
 
     # --------------------------------------------------------
     # Test 1 - Percentage
@@ -1262,8 +1577,14 @@ def run_tests():
 
     assert result["status"] == "success"
     assert result["correct_answer"] == 1
-    assert approximately_equal(result["calculated_answer"][0], 0.5)
-    assert approximately_equal(result["calculated_answer"][1], -3)
+    assert approximately_equal(
+        result["calculated_answer"][0],
+        0.5
+    )
+    assert approximately_equal(
+        result["calculated_answer"][1],
+        -3
+    )
 
     print("✅ Test 9 passed.")
 
@@ -1296,13 +1617,80 @@ def run_tests():
     assert result["status"] == "error"
     assert result["correct_answer"] is None
 
+    print("✅ Test 10 passed.")
+
+    # --------------------------------------------------------
+    # Test 11 - Linear Equation
+    # --------------------------------------------------------
+
+    print("\nTest 11: Linear Equation")
+
+    question = {
+        "topic": "Algebra",
+        "type": "LINEAR_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": 11
+        },
+        "options": [
+            "2",
+            "3",
+            "4",
+            "5"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        3
+    )
+    assert result["correct_answer"] == 2
+
     print("✅ Test 11 passed.")
 
     # --------------------------------------------------------
-    # Test 11 - No matching Percentage option
+    # Test 12 - Linear Wrong Options
     # --------------------------------------------------------
 
-    print("\nTest 11: No matching Percentage option")
+    print("\nTest 12: Linear Wrong Options")
+
+    question = {
+        "topic": "Algebra",
+        "type": "LINEAR_EQUATION",
+        "parameters": {
+            "a": 2,
+            "b": 5,
+            "c": 11
+        },
+        "options": [
+            "1",
+            "2",
+            "4",
+            "5"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "error"
+    assert result["calculated_answer"] == 3
+    assert result["correct_answer"] is None
+
+    print("✅ Test 12 passed.")
+
+    # --------------------------------------------------------
+    # Test 13 - No matching Percentage option
+    # --------------------------------------------------------
+
+    print("\nTest 13: No matching Percentage option")
 
     question = {
         "topic": "Percentage",
@@ -1324,11 +1712,19 @@ def run_tests():
     assert result["calculated_answer"] == 40
     assert result["correct_answer"] is None
 
-    print("✅ Test 10 passed.")
+    print("✅ Test 13 passed.")
 
-    print("\n" + "=" * 60)
-    print("🎉 ALL ANSWER ENGINE TESTS PASSED")
-    print("=" * 60)
+    print(
+        "\n" + "=" * 60
+    )
+
+    print(
+        "🎉 ALL ANSWER ENGINE TESTS PASSED"
+    )
+
+    print(
+        "=" * 60
+    )
 
 
 # ============================================================
