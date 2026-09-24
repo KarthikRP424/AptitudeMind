@@ -1,3 +1,4 @@
+
 # ============================================================
 # AptitudeMind - Agent Decision & Execution Layer
 # ============================================================
@@ -8,6 +9,7 @@ from difficulty import get_difficulty
 from generator import generate_question
 from validator import validate_question
 from evaluator import evaluate_question
+from question_adapter import adapt_question
 
 
 # ============================================================
@@ -179,10 +181,55 @@ def execute_decision(decision):
                 "message": "No question available."
             }
 
+        # ----------------------------------------------------
+        # Get question from question bank
+        # ----------------------------------------------------
+
         question = questions[0]
 
-        # Final validation of retrieved question
-        validation = validate_question(question)
+        print(
+            "\n🔄 Agent adapting retrieved question..."
+        )
+
+        # ----------------------------------------------------
+        # Question Adapter
+        #
+        # Converts older question-bank records into
+        # the standardized AptitudeMind question format.
+        # ----------------------------------------------------
+
+        adapted_question = adapt_question(
+            question
+        )
+
+        if adapted_question.get("status") != "success":
+
+            return {
+                "status": "error",
+                "action": "retrieve",
+                "question": None,
+                "message": (
+                    "Retrieved question could not be adapted."
+                ),
+                "adapter_error": adapted_question.get(
+                    "message",
+                    "Unknown adapter error."
+                )
+            }
+
+        question = adapted_question["question"]
+
+        print(
+            "🔄 Question Adapter: PASSED"
+        )
+
+        # ----------------------------------------------------
+        # Final validation of adapted question
+        # ----------------------------------------------------
+
+        validation = validate_question(
+            question
+        )
 
         if not validation["valid"]:
 
@@ -191,18 +238,22 @@ def execute_decision(decision):
                 "action": "retrieve",
                 "question": None,
                 "message": (
-                    "Retrieved question failed validation."
+                    "Adapted question failed validation."
                 ),
                 "validation_errors": validation["errors"]
             }
+
+        print(
+            "🛡️ Retrieved question validation: PASSED"
+        )
 
         return {
             "status": "success",
             "action": "retrieve",
             "question": question,
             "message": (
-                "Question retrieved and validated "
-                "from question bank."
+                "Question retrieved from question bank, "
+                "adapted, and validated successfully."
             )
         }
 

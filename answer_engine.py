@@ -12,6 +12,8 @@ Responsibilities:
 Supported topics:
 - Percentage
 - Profit
+- Profit Percentage
+- Profit and Loss
 - Loss
 - Average
 - Simple Interest
@@ -247,6 +249,130 @@ def solve_profit(question_data):
 
 
 # ============================================================
+# Profit Percentage
+# ============================================================
+
+def solve_profit_percentage(question_data):
+    """
+    Calculate profit percentage from cost price
+    and selling price.
+
+    Formula:
+
+        Profit = Selling Price - Cost Price
+
+        Profit Percentage =
+            (Profit / Cost Price) × 100
+
+    Expected internal data:
+
+    {
+        "cost_price": 500,
+        "selling_price": 600,
+        "options": ["10", "15", "20", "25"]
+    }
+    """
+
+    cost_price = question_data.get(
+        "cost_price"
+    )
+
+    selling_price = question_data.get(
+        "selling_price"
+    )
+
+    options = question_data.get(
+        "options",
+        []
+    )
+
+    if cost_price is None or selling_price is None:
+
+        return create_result(
+            status="error",
+            topic="Profit Percentage",
+            message=(
+                "Profit percentage question requires "
+                "'cost_price' and 'selling_price'."
+            )
+        )
+
+    try:
+
+        cost_price = float(cost_price)
+        selling_price = float(selling_price)
+
+    except (TypeError, ValueError):
+
+        return create_result(
+            status="error",
+            topic="Profit Percentage",
+            message=(
+                "Cost price and selling price "
+                "must be numeric."
+            )
+        )
+
+    if approximately_equal(
+        cost_price,
+        0
+    ):
+
+        return create_result(
+            status="error",
+            topic="Profit Percentage",
+            message="Cost price cannot be zero."
+        )
+
+    profit = (
+        selling_price - cost_price
+    )
+
+    answer = (
+        profit / cost_price
+    ) * 100
+
+    correct_option = find_matching_option(
+        answer,
+        options
+    )
+
+    if correct_option is None:
+
+        return create_result(
+            status="error",
+            topic="Profit Percentage",
+            calculated_answer=answer,
+            message=(
+                "Calculated profit percentage does not "
+                "match any provided option."
+            )
+        )
+
+    explanation = (
+        f"Profit = Selling Price - Cost Price\n"
+        f"= {selling_price} - {cost_price}\n"
+        f"= {profit}\n\n"
+        f"Profit Percentage = "
+        f"(Profit / Cost Price) × 100\n"
+        f"= ({profit} / {cost_price}) × 100\n"
+        f"= {answer}%"
+    )
+
+    return create_result(
+        status="success",
+        topic="Profit Percentage",
+        calculated_answer=answer,
+        correct_answer=correct_option,
+        explanation=explanation,
+        message=(
+            "Profit percentage answer "
+            "verified successfully."
+        )
+    )
+
+
+# ============================================================
 # Loss
 # ============================================================
 
@@ -475,14 +601,6 @@ def solve_simple_interest(question_data):
 def solve_distance(question_data):
     """
     Calculate distance.
-
-    Expected internal data:
-
-    {
-        "speed": 60,
-        "time": 2,
-        "options": ["60", "100", "120", "150"]
-    }
     """
 
     speed = question_data.get("speed")
@@ -545,14 +663,6 @@ def solve_distance(question_data):
 def solve_speed(question_data):
     """
     Calculate speed.
-
-    Expected internal data:
-
-    {
-        "distance": 120,
-        "time": 2,
-        "options": ["40", "60", "80", "100"]
-    }
     """
 
     distance = question_data.get("distance")
@@ -623,14 +733,6 @@ def solve_speed(question_data):
 def solve_time(question_data):
     """
     Calculate time.
-
-    Expected internal data:
-
-    {
-        "distance": 120,
-        "speed": 60,
-        "options": ["1", "2", "3", "4"]
-    }
     """
 
     distance = question_data.get("distance")
@@ -798,32 +900,6 @@ def solve_linear_equation(question_data):
     Solve a linear equation:
 
         ax + b = c
-
-    Expected internal data:
-
-    {
-        "topic": "Algebra",
-        "type": "LINEAR_EQUATION",
-        "parameters": {
-            "a": 2,
-            "b": 5,
-            "c": 11
-        },
-        "options": [
-            "2",
-            "3",
-            "4",
-            "5"
-        ]
-    }
-
-    Formula:
-
-        ax + b = c
-
-        ax = c - b
-
-        x = (c - b) / a
     """
 
     parameters = question_data.get(
@@ -964,19 +1040,6 @@ def solve_quadratic_equation(question_data):
     Solve a quadratic equation:
 
         ax² + bx + c = 0
-
-    Expected internal data:
-
-    {
-        "topic": "Algebra",
-        "type": "QUADRATIC_EQUATION",
-        "parameters": {
-            "a": 2,
-            "b": 5,
-            "c": -3
-        },
-        "options": ["1/2", "-3/2", "-1", "3/2"]
-    }
     """
 
     parameters = question_data.get(
@@ -1049,10 +1112,6 @@ def solve_quadratic_equation(question_data):
         - 4 * a * c
     )
 
-    # --------------------------------------------------------
-    # No real roots
-    # --------------------------------------------------------
-
     if discriminant < 0:
 
         explanation = (
@@ -1072,10 +1131,6 @@ def solve_quadratic_equation(question_data):
                 "no real roots."
             )
         )
-
-    # --------------------------------------------------------
-    # One repeated real root
-    # --------------------------------------------------------
 
     if approximately_equal(
         discriminant,
@@ -1135,7 +1190,6 @@ def solve_quadratic_equation(question_data):
 
     else:
 
-        # A quadratic may have two correct root options.
         correct_answer = matching_options
 
     root_text = ", ".join(
@@ -1196,6 +1250,53 @@ def verify_answer(question_data):
     if normalized_topic == "profit":
 
         return solve_profit(
+            question_data
+        )
+
+    # --------------------------------------------------------
+    # Profit Percentage
+    #
+    # Supports both:
+    #     "Profit Percentage"
+    #     "Profit and Loss"
+    #
+    # The Question Adapter currently produces:
+    #
+    #     topic = "Profit and Loss"
+    #     type  = "PROFIT_PERCENTAGE"
+    # --------------------------------------------------------
+
+    if normalized_topic in {
+        "profit percentage",
+        "profit_percentage",
+        "profit and loss",
+    }:
+
+        question_type = str(
+            question_data.get(
+                "type",
+                ""
+            )
+        ).upper()
+
+        # If the topic is specifically Profit and Loss,
+        # make sure the question is actually a
+        # profit-percentage question.
+        if (
+            normalized_topic == "profit and loss"
+            and question_type != "PROFIT_PERCENTAGE"
+        ):
+
+            return create_result(
+                status="error",
+                topic=topic,
+                message=(
+                    "Profit and Loss question requires "
+                    "'type': 'PROFIT_PERCENTAGE'."
+                )
+            )
+
+        return solve_profit_percentage(
             question_data
         )
 
@@ -1713,6 +1814,97 @@ def run_tests():
     assert result["correct_answer"] is None
 
     print("✅ Test 13 passed.")
+
+    # --------------------------------------------------------
+    # Test 14 - Profit Percentage
+    # --------------------------------------------------------
+
+    print("\nTest 14: Profit Percentage")
+
+    question = {
+        "topic": "Profit Percentage",
+        "type": "PROFIT_PERCENTAGE",
+        "cost_price": 500,
+        "selling_price": 600,
+        "options": [
+            "10",
+            "15",
+            "20",
+            "25"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        20
+    )
+    assert result["correct_answer"] == 3
+
+    print("✅ Test 14 passed.")
+
+    # --------------------------------------------------------
+    # Test 15 - Adapted Profit Percentage
+    # --------------------------------------------------------
+
+    print("\nTest 15: Adapted Profit Percentage")
+
+    # This is the exact standardized format produced
+    # by Question Adapter.
+
+    question = {
+        "question": (
+            "An article is bought for ₹500 and sold for ₹600. "
+            "What is the profit percentage?"
+        ),
+        "topic": "Profit and Loss",
+        "type": "PROFIT_PERCENTAGE",
+        "difficulty": "Easy",
+        "company": "Infosys",
+        "source": "company_style",
+        "parameters": {
+            "cost_price": 500,
+            "selling_price": 600
+        },
+        "options": [
+            "10",
+            "15",
+            "20",
+            "25"
+        ]
+    }
+
+    # The evaluator copies parameters to the top level
+    # before calling the Answer Engine.
+    prepared_question = dict(question)
+
+    parameters = question.get(
+        "parameters",
+        {}
+    )
+
+    for key, value in parameters.items():
+
+        prepared_question[key] = value
+
+    result = verify_answer(
+        prepared_question
+    )
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        20
+    )
+    assert result["correct_answer"] == 3
+
+    print("✅ Test 15 passed.")
 
     print(
         "\n" + "=" * 60
