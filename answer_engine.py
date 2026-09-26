@@ -378,32 +378,143 @@ def solve_profit_percentage(question_data):
 
 def solve_loss(question_data):
     """
-    Calculate loss question.
+    Calculate a loss question.
 
-    Expected internal data:
+    Supports two deterministic forms:
 
-    {
-        "cost_price": 1000,
-        "loss_percentage": 20,
-        "options": ["700", "800", "900", "1200"]
-    }
+    1. Forward loss:
+        cost_price + loss_percentage -> selling price
+
+    2. Reverse loss:
+        selling_price + loss_percentage -> cost price
+
+    The Question Adapter currently produces the reverse form
+    for the Infosys LOSS question.
     """
 
     cost_price = question_data.get("cost_price")
-    loss_percentage = question_data.get(
-        "loss_percentage"
-    )
+    selling_price = question_data.get("selling_price")
+    loss_percentage = question_data.get("loss_percentage")
     options = question_data.get("options", [])
 
-    if cost_price is None or loss_percentage is None:
-
+    if loss_percentage is None:
         return create_result(
             status="error",
             topic="Loss",
             message=(
-                "Loss question requires "
-                "'cost_price' and 'loss_percentage'."
+                "Loss question requires 'loss_percentage' "
+                "and either 'cost_price' or 'selling_price'."
             )
+        )
+
+    try:
+        loss_percentage = float(loss_percentage)
+    except (TypeError, ValueError):
+        return create_result(
+            status="error",
+            topic="Loss",
+            message="Loss percentage must be numeric."
+        )
+
+    if loss_percentage <= 0 or loss_percentage >= 100:
+        return create_result(
+            status="error",
+            topic="Loss",
+            message="Loss percentage must be greater than 0 and less than 100."
+        )
+
+    # --------------------------------------------------------
+    # Reverse Loss
+    # Selling Price is known; calculate Cost Price.
+    # --------------------------------------------------------
+
+    if selling_price is not None and cost_price is None:
+        try:
+            selling_price = float(selling_price)
+        except (TypeError, ValueError):
+            return create_result(
+                status="error",
+                topic="Loss",
+                message="Selling price must be numeric."
+            )
+
+        if selling_price <= 0:
+            return create_result(
+                status="error",
+                topic="Loss",
+                message="Selling price must be greater than zero."
+            )
+
+        remaining_percentage = 100 - loss_percentage
+        answer = selling_price / (remaining_percentage / 100)
+
+        correct_option = find_matching_option(
+            answer,
+            options
+        )
+
+        if correct_option is None:
+            return create_result(
+                status="error",
+                topic="Loss",
+                calculated_answer=answer,
+                message=(
+                    "Calculated cost price does not match "
+                    "any provided option."
+                )
+            )
+
+        loss_amount = answer - selling_price
+
+        explanation = (
+            f"At a {loss_percentage}% loss, Selling Price = "
+            f"{100 - loss_percentage}% of Cost Price.\n"
+            f"Cost Price = Selling Price / "
+            f"({100 - loss_percentage} / 100)\n"
+            f"= {selling_price} / "
+            f"({100 - loss_percentage} / 100)\n"
+            f"= {answer}.\n\n"
+            f"Loss = {loss_amount}."
+        )
+
+        return create_result(
+            status="success",
+            topic="Loss",
+            calculated_answer=answer,
+            correct_answer=correct_option,
+            explanation=explanation,
+            message="Reverse loss answer verified successfully."
+        )
+
+    # --------------------------------------------------------
+    # Forward Loss
+    # Cost Price is known; calculate Selling Price.
+    # --------------------------------------------------------
+
+    if cost_price is None:
+        return create_result(
+            status="error",
+            topic="Loss",
+            message=(
+                "Loss question requires either 'cost_price' "
+                "or 'selling_price'."
+            )
+        )
+
+    try:
+        cost_price = float(cost_price)
+    except (TypeError, ValueError):
+        return create_result(
+            status="error",
+            topic="Loss",
+            message="Cost price must be numeric."
+        )
+
+    if cost_price <= 0:
+        return create_result(
+            status="error",
+            topic="Loss",
+            message="Cost price must be greater than zero."
         )
 
     answer = calculate_loss(
@@ -417,13 +528,12 @@ def solve_loss(question_data):
     )
 
     if correct_option is None:
-
         return create_result(
             status="error",
             topic="Loss",
             calculated_answer=answer,
             message=(
-                "Calculated answer does not match "
+                "Calculated selling price does not match "
                 "any provided option."
             )
         )
@@ -434,10 +544,8 @@ def solve_loss(question_data):
     )
 
     explanation = (
-        f"Loss = {loss_percentage}% of {cost_price} "
-        f"= {loss}. "
-        f"Selling Price = {cost_price} - {loss} "
-        f"= {answer}"
+        f"Loss = {loss_percentage}% of {cost_price} = {loss}. "
+        f"Selling Price = {cost_price} - {loss} = {answer}"
     )
 
     return create_result(
@@ -1279,20 +1387,44 @@ def verify_answer(question_data):
             )
         ).upper()
 
-        # If the topic is specifically Profit and Loss,
-        # make sure the question is actually a
-        # profit-percentage question.
-        if (
-            normalized_topic == "profit and loss"
-            and question_type != "PROFIT_PERCENTAGE"
-        ):
+        # ----------------------------------------------------
+        # Profit and Loss routing
+        # ----------------------------------------------------
+        #
+        # The Question Adapter uses:
+        #     topic = "Profit and Loss"
+        #     type  = "PROFIT" / "LOSS" / "PROFIT_PERCENTAGE"
+        #
+        # Route each type to its matching deterministic solver.
+        # ----------------------------------------------------
+
+        if normalized_topic == "profit and loss":
+
+            if question_type == "PROFIT":
+
+                return solve_profit(
+                    question_data
+                )
+
+            if question_type == "LOSS":
+
+                return solve_loss(
+                    question_data
+                )
+
+            if question_type == "PROFIT_PERCENTAGE":
+
+                return solve_profit_percentage(
+                    question_data
+                )
 
             return create_result(
                 status="error",
                 topic=topic,
                 message=(
                     "Profit and Loss question requires "
-                    "'type': 'PROFIT_PERCENTAGE'."
+                    "'type': 'PROFIT', 'LOSS', or "
+                    "'PROFIT_PERCENTAGE'."
                 )
             )
 
@@ -1905,6 +2037,121 @@ def run_tests():
     assert result["correct_answer"] == 3
 
     print("✅ Test 15 passed.")
+
+    # --------------------------------------------------------
+    # Test 16 - Adapted Profit
+    # --------------------------------------------------------
+
+    print("\nTest 16: Adapted Profit")
+
+    # This is the standardized format produced
+    # by Question Adapter for PROFIT.
+
+    question = {
+        "question": (
+            "A shopkeeper buys an article for ₹1200 "
+            "and sells it at a profit of 15%. "
+            "Find the selling price."
+        ),
+        "topic": "Profit and Loss",
+        "type": "PROFIT",
+        "difficulty": "Medium",
+        "company": "Infosys",
+        "source": "company_style",
+        "parameters": {
+            "cost_price": 1200,
+            "profit_percentage": 15
+        },
+        "options": [
+            "1320",
+            "1350",
+            "1380",
+            "1400"
+        ]
+    }
+
+    # The evaluator copies parameters to the top level
+    # before calling the Answer Engine.
+    prepared_question = dict(question)
+
+    parameters = question.get(
+        "parameters",
+        {}
+    )
+
+    for key, value in parameters.items():
+
+        prepared_question[key] = value
+
+    result = verify_answer(
+        prepared_question
+    )
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        1380
+    )
+    assert result["correct_answer"] == 3
+
+    print("✅ Test 16 passed.")
+
+    # --------------------------------------------------------
+    # Test 17 - Adapted Loss
+    # --------------------------------------------------------
+
+    print("\nTest 17: Adapted Loss")
+
+    # Exact standardized format produced by Question Adapter.
+
+    question = {
+        "question": (
+            "An article is sold at a 20% loss. If the selling "
+            "price is ₹960, what was its cost price?"
+        ),
+        "topic": "Profit and Loss",
+        "type": "LOSS",
+        "difficulty": "Hard",
+        "company": "Infosys",
+        "source": "company_style",
+        "parameters": {
+            "selling_price": 960,
+            "loss_percentage": 20
+        },
+        "options": [
+            "800",
+            "1000",
+            "1200",
+            "1250"
+        ]
+    }
+
+    prepared_question = dict(question)
+
+    parameters = question.get(
+        "parameters",
+        {}
+    )
+
+    for key, value in parameters.items():
+        prepared_question[key] = value
+
+    result = verify_answer(
+        prepared_question
+    )
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        1200
+    )
+    assert result["correct_answer"] == 3
+
+    print("✅ Test 17 passed.")
 
     print(
         "\n" + "=" * 60
