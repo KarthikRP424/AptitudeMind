@@ -8,7 +8,7 @@ from question_bank import search_questions
 from difficulty import get_difficulty
 from generator import generate_question
 from validator import validate_question
-from evaluator import evaluate_question
+from evaluator import evaluate_question, evaluate_answer
 from question_adapter import adapt_question
 
 
@@ -375,6 +375,177 @@ def execute_decision(decision):
             f"Unknown agent action: {action}"
         )
     }
+
+
+# ============================================================
+# Agent Student Answer Evaluation
+# ============================================================
+
+def evaluate_student_answer(
+    question_data,
+    student_answer
+):
+    """
+    Evaluate a student's selected answer through the Agent.
+
+    Flow:
+
+        Student Answer
+              ↓
+        Validate Question
+              ↓
+        Adapt if necessary
+              ↓
+        Validate Again
+              ↓
+        Evaluator
+              ↓
+        Answer Engine
+              ↓
+        Evaluation Result
+
+    The function is intentionally separate from
+    evaluate_question().
+
+    evaluate_question() is the interactive terminal
+    workflow that asks the student for input.
+
+    evaluate_student_answer() accepts an answer directly,
+    which makes it suitable for future API and website use.
+
+    Returns:
+        dict: Structured evaluation result.
+    """
+
+    # --------------------------------------------------------
+    # Validate input question
+    # --------------------------------------------------------
+
+    if not isinstance(question_data, dict):
+
+        return {
+            "status": "error",
+            "result": None,
+            "student_answer": student_answer,
+            "correct_answer": None,
+            "calculated_answer": None,
+            "explanation": "",
+            "message": "Question must be a dictionary."
+        }
+
+    # --------------------------------------------------------
+    # First try the question as it is.
+    #
+    # This is important because generated questions may use
+    # question types that are not handled by the legacy
+    # question adapter.
+    # --------------------------------------------------------
+
+    validation = validate_question(
+        question_data
+    )
+
+    if validation["valid"]:
+
+        standardized_question = question_data
+
+    else:
+
+        # ----------------------------------------------------
+        # If the question is not already valid, try adapting
+        # an older question-bank format.
+        # ----------------------------------------------------
+
+        print(
+            "\n🔄 Agent attempting question adaptation..."
+        )
+
+        adapted_question = adapt_question(
+            question_data
+        )
+
+        if adapted_question.get("status") != "success":
+
+            return {
+                "status": "error",
+                "result": None,
+                "student_answer": student_answer,
+                "correct_answer": None,
+                "calculated_answer": None,
+                "explanation": "",
+                "message": (
+                    "Question is invalid and could not "
+                    "be adapted."
+                ),
+                "validation_errors": validation.get(
+                    "errors",
+                    []
+                ),
+                "adapter_error": adapted_question.get(
+                    "message",
+                    "Unknown adapter error."
+                )
+            }
+
+        standardized_question = adapted_question[
+            "question"
+        ]
+
+        # ----------------------------------------------------
+        # Validate adapted question
+        # ----------------------------------------------------
+
+        adapted_validation = validate_question(
+            standardized_question
+        )
+
+        if not adapted_validation["valid"]:
+
+            return {
+                "status": "error",
+                "result": None,
+                "student_answer": student_answer,
+                "correct_answer": None,
+                "calculated_answer": None,
+                "explanation": "",
+                "message": (
+                    "Adapted question failed "
+                    "Agent validation."
+                ),
+                "validation_errors": (
+                    adapted_validation.get(
+                        "errors",
+                        []
+                    )
+                )
+            }
+
+        print(
+            "🔄 Question Adapter: PASSED"
+        )
+
+    # --------------------------------------------------------
+    # Send the standardized question and student's answer
+    # to the Evaluator.
+    # --------------------------------------------------------
+
+    print(
+        "\n🧠 Agent sending answer to Evaluator..."
+    )
+
+    evaluation = evaluate_answer(
+        standardized_question,
+        student_answer
+    )
+
+    # --------------------------------------------------------
+    # Return the Evaluator's structured result directly.
+    #
+    # Keeping the result structure unchanged makes this
+    # function easy to connect to an API later.
+    # --------------------------------------------------------
+
+    return evaluation
 
 
 # ============================================================
