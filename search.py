@@ -76,11 +76,67 @@ def find_difficulty(query):
 def find_topic(query):
     """
     Find an aptitude topic mentioned in the query.
+
+    Supports both:
+        1. Exact topic names
+        2. Common topic aliases
+
+    Examples:
+        "percentage"
+            -> Percentage
+
+        "profit"
+            -> Profit and Loss
+
+        "loss"
+            -> Profit and Loss
+
+        "profit percentage"
+            -> Profit and Loss
     """
 
     query = normalize(query)
 
     all_topics = get_available_topics()
+
+    # --------------------------------------------------------
+    # Topic aliases
+    #
+    # These allow users to use common short forms instead
+    # of typing the exact topic name.
+    # --------------------------------------------------------
+
+    topic_aliases = {
+        "profit": "Profit and Loss",
+        "loss": "Profit and Loss",
+        "profit percentage": "Profit and Loss"
+    }
+
+    # --------------------------------------------------------
+    # Check aliases first.
+    #
+    # Longer aliases are checked first so that:
+    #
+    # "profit percentage"
+    #
+    # is checked before:
+    #
+    # "profit"
+    # --------------------------------------------------------
+
+    sorted_aliases = sorted(
+        topic_aliases.items(),
+        key=lambda item: len(item[0]),
+        reverse=True
+    )
+
+    for alias, topic in sorted_aliases:
+
+        if alias in query:
+
+            if topic in all_topics:
+
+                return topic
 
     # --------------------------------------------------------
     # Sort by length.
@@ -97,6 +153,10 @@ def find_topic(query):
         key=len,
         reverse=True
     )
+
+    # --------------------------------------------------------
+    # Exact topic matching
+    # --------------------------------------------------------
 
     for topic in all_topics:
 
