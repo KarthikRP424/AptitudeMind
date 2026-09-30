@@ -24,6 +24,17 @@ def find_questions(query):
         Company    -> TCS
         Topic      -> Percentage
         Difficulty -> Medium
+
+    Specific question types are also supported.
+
+    Example:
+
+        profit percentage
+
+    becomes:
+
+        Topic          -> Profit and Loss
+        Question Type  -> PROFIT_PERCENTAGE
     """
 
     filters = parse_search(query)
@@ -33,6 +44,28 @@ def find_questions(query):
         topic=filters["topic"],
         difficulty=filters["difficulty"]
     )
+
+    # --------------------------------------------------------
+    # Filter by specific question type
+    #
+    # The question bank already filters by:
+    #
+    # company + topic + difficulty
+    #
+    # We apply question type here because the existing
+    # question_bank search interface does not require
+    # modification.
+    # --------------------------------------------------------
+
+    question_type = filters.get("question_type")
+
+    if question_type:
+
+        questions = [
+            question
+            for question in questions
+            if question.get("type") == question_type
+        ]
 
     return filters, questions
 
@@ -67,6 +100,13 @@ def display_questions(filters, questions):
         else "All Levels"
     )
 
+    print(
+        "🧩 Question Type:",
+        filters["question_type"]
+        if filters.get("question_type")
+        else "All Types"
+    )
+
     print("\n--------------------------------")
 
     if not questions:
@@ -96,6 +136,10 @@ def display_questions(filters, questions):
 
         print(
             f"   Topic: {question['topic']}"
+        )
+
+        print(
+            f"   Type: {question['type']}"
         )
 
         print(

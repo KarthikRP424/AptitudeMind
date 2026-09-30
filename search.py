@@ -70,6 +70,55 @@ def find_difficulty(query):
 
 
 # ============================================================
+# Find Question Type
+# ============================================================
+
+def find_question_type(query):
+    """
+    Find a specific question type mentioned
+    in the search query.
+
+    Examples:
+
+        "profit percentage"
+            -> PROFIT_PERCENTAGE
+
+        "profit"
+            -> PROFIT
+
+        "loss"
+            -> LOSS
+    """
+
+    query = normalize(query)
+
+    question_type_aliases = {
+        "profit percentage": "PROFIT_PERCENTAGE",
+        "profit and percentage": "PROFIT_PERCENTAGE",
+        "profit": "PROFIT",
+        "loss": "LOSS"
+    }
+
+    # --------------------------------------------------------
+    # Check longer phrases first.
+    # --------------------------------------------------------
+
+    sorted_aliases = sorted(
+        question_type_aliases.items(),
+        key=lambda item: len(item[0]),
+        reverse=True
+    )
+
+    for alias, question_type in sorted_aliases:
+
+        if alias in query:
+
+            return question_type
+
+    return None
+
+
+# ============================================================
 # Find Topic
 # ============================================================
 
@@ -101,9 +150,6 @@ def find_topic(query):
 
     # --------------------------------------------------------
     # Topic aliases
-    #
-    # These allow users to use common short forms instead
-    # of typing the exact topic name.
     # --------------------------------------------------------
 
     topic_aliases = {
@@ -114,14 +160,6 @@ def find_topic(query):
 
     # --------------------------------------------------------
     # Check aliases first.
-    #
-    # Longer aliases are checked first so that:
-    #
-    # "profit percentage"
-    #
-    # is checked before:
-    #
-    # "profit"
     # --------------------------------------------------------
 
     sorted_aliases = sorted(
@@ -140,12 +178,6 @@ def find_topic(query):
 
     # --------------------------------------------------------
     # Sort by length.
-    #
-    # This helps match longer topics first.
-    #
-    # Example:
-    # "Time Speed and Distance"
-    # should be checked before "Time".
     # --------------------------------------------------------
 
     all_topics = sorted(
@@ -178,24 +210,14 @@ def parse_search(query):
         company
         topic
         difficulty
-
-    Example:
-
-        "TCS percentage medium"
-
-    becomes:
-
-        {
-            "company": "TCS",
-            "topic": "Percentage",
-            "difficulty": "Medium"
-        }
+        question_type
     """
 
     return {
         "company": find_company(query),
         "topic": find_topic(query),
-        "difficulty": find_difficulty(query)
+        "difficulty": find_difficulty(query),
+        "question_type": find_question_type(query)
     }
 
 
@@ -248,6 +270,13 @@ def show_search_result(search_data):
         else "All Levels"
     )
 
+    print(
+        "🧩 Question Type:",
+        search_data["question_type"]
+        if search_data["question_type"]
+        else "All Types"
+    )
+
 
 # ============================================================
 # Test Search System
@@ -261,15 +290,6 @@ if __name__ == "__main__":
         "\n🔎 Enter your search: "
     )
 
-    result = parse_search(query)
+    search_data = parse_search(query)
 
-    if validate_search(result):
-
-        show_search_result(result)
-
-    else:
-
-        print(
-            "\n⚠️ No company, topic, or difficulty "
-            "was detected."
-        )
+    show_search_result(search_data)

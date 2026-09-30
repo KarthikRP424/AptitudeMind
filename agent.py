@@ -1,4 +1,3 @@
-
 # ============================================================
 # AptitudeMind - Agent Decision & Execution Layer
 # ============================================================
@@ -72,6 +71,11 @@ def decide_action(
             and filters["difficulty"] is None
         ):
 
+            # Keep the questions already found by the
+            # original search. These may contain the exact
+            # question type requested by the student.
+            original_questions = questions
+
             filters["difficulty"] = get_difficulty(
                 filters["topic"]
             )
@@ -87,6 +91,52 @@ def decide_action(
                 topic=filters["topic"],
                 difficulty=filters["difficulty"]
             )
+
+            # ------------------------------------------------
+            # Preserve specific question-type intent.
+            #
+            # Example:
+            #
+            # User: "profit percentage"
+            #
+            # Search detects:
+            # Topic = Profit and Loss
+            # Type = PROFIT_PERCENTAGE
+            #
+            # Adaptive difficulty may select Hard.
+            # If Hard contains only LOSS questions,
+            # we must NOT replace the user's requested
+            # PROFIT_PERCENTAGE question with LOSS.
+            # ------------------------------------------------
+
+            question_type = filters.get("question_type")
+
+            if question_type:
+
+                filtered_questions = [
+                    question
+                    for question in questions
+                    if question.get("type") == question_type
+                ]
+
+                # If the adaptive difficulty contains the
+                # requested question type, use it.
+                if filtered_questions:
+
+                    questions = filtered_questions
+
+                else:
+                    # No matching question at the selected
+                    # adaptive difficulty.
+                    #
+                    # Fall back to the questions found by the
+                    # original search because they preserve
+                    # the student's exact intent.
+                    questions = [
+                        question
+                        for question in original_questions
+                        if question.get("type") == question_type
+                    ]
 
         # ----------------------------------------------------
         # Question found
