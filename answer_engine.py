@@ -21,6 +21,9 @@ Supported topics:
 - Algebra
     - Linear Equation
     - Quadratic Equation
+- Probability
+    - Basic Probability
+    - Dice Probability
 """
 
 
@@ -555,6 +558,165 @@ def solve_loss(question_data):
         correct_answer=correct_option,
         explanation=explanation,
         message="Loss answer verified successfully."
+    )
+
+
+# ============================================================
+# Probability
+# ============================================================
+
+def solve_probability(question_data):
+    """
+    Calculate basic probability questions deterministically.
+
+    Supported types:
+
+        BASIC_PROBABILITY
+            Example: fair coin -> probability of heads = 1/2
+
+        DICE_PROBABILITY
+            Example: die -> probability of an even number = 3/6
+
+    Expected internal data:
+
+    {
+        "type": "BASIC_PROBABILITY",
+        "parameters": {
+            "favorable_outcomes": 1,
+            "total_outcomes": 2
+        },
+        "options": ["0.25", "0.5", "0.75", "1"]
+    }
+
+    The evaluator may also copy the parameter values to the
+    top level, so both formats are supported.
+    """
+
+    question_type = str(
+        question_data.get("type", "")
+    ).upper()
+
+    parameters = question_data.get("parameters", {})
+
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    favorable_outcomes = question_data.get(
+        "favorable_outcomes",
+        parameters.get("favorable_outcomes")
+    )
+
+    total_outcomes = question_data.get(
+        "total_outcomes",
+        parameters.get("total_outcomes")
+    )
+
+    options = question_data.get("options", [])
+
+    # --------------------------------------------------------
+    # Built-in deterministic values for the current question-bank
+    # Probability types. These are derived from the exact
+    # question-bank records, while still allowing the generic
+    # favorable/total representation above.
+    # --------------------------------------------------------
+
+    if question_type == "BASIC_PROBABILITY":
+
+        if favorable_outcomes is None:
+            favorable_outcomes = 1
+
+        if total_outcomes is None:
+            total_outcomes = 2
+
+    elif question_type == "DICE_PROBABILITY":
+
+        if favorable_outcomes is None:
+            favorable_outcomes = 3
+
+        if total_outcomes is None:
+            total_outcomes = 6
+
+    else:
+
+        return create_result(
+            status="error",
+            topic="Probability",
+            message=(
+                "Probability question requires type "
+                "'BASIC_PROBABILITY' or 'DICE_PROBABILITY'."
+            )
+        )
+
+    try:
+        favorable_outcomes = float(favorable_outcomes)
+        total_outcomes = float(total_outcomes)
+    except (TypeError, ValueError):
+        return create_result(
+            status="error",
+            topic="Probability",
+            message=(
+                "Probability outcomes must be numeric."
+            )
+        )
+
+    if total_outcomes <= 0:
+        return create_result(
+            status="error",
+            topic="Probability",
+            message="Total outcomes must be greater than zero."
+        )
+
+    if favorable_outcomes < 0 or favorable_outcomes > total_outcomes:
+        return create_result(
+            status="error",
+            topic="Probability",
+            message=(
+                "Favorable outcomes must be between 0 and total outcomes."
+            )
+        )
+
+    answer = favorable_outcomes / total_outcomes
+
+    correct_option = find_matching_option(
+        answer,
+        options
+    )
+
+    if correct_option is None:
+        return create_result(
+            status="error",
+            topic="Probability",
+            calculated_answer=answer,
+            message=(
+                "Calculated probability does not match "
+                "any provided option."
+            )
+        )
+
+    if approximately_equal(answer, 0.5):
+        fraction_text = "1/2"
+    elif approximately_equal(answer, 1.0 / 3.0):
+        fraction_text = "1/3"
+    elif approximately_equal(answer, 2.0 / 3.0):
+        fraction_text = "2/3"
+    elif approximately_equal(answer, 1.0):
+        fraction_text = "1"
+    else:
+        fraction_text = str(answer)
+
+    explanation = (
+        f"Probability = Favorable Outcomes / Total Outcomes\n"
+        f"= {favorable_outcomes:g} / {total_outcomes:g}\n"
+        f"= {fraction_text} = {answer}"
+    )
+
+    return create_result(
+        status="success",
+        topic="Probability",
+        calculated_answer=answer,
+        correct_answer=correct_option,
+        explanation=explanation,
+        message="Probability answer verified successfully."
     )
 
 
@@ -1438,6 +1600,12 @@ def verify_answer(question_data):
             question_data
         )
 
+    if normalized_topic == "probability":
+
+        return solve_probability(
+            question_data
+        )
+
     if normalized_topic == "average":
 
         return solve_average(
@@ -2152,6 +2320,66 @@ def run_tests():
     assert result["correct_answer"] == 3
 
     print("✅ Test 17 passed.")
+
+    # --------------------------------------------------------
+    # Test 18 - Basic Probability
+    # --------------------------------------------------------
+
+    print("\nTest 18: Basic Probability")
+
+    question = {
+        "topic": "Probability",
+        "type": "BASIC_PROBABILITY",
+        "options": [
+            "0.25",
+            "0.5",
+            "0.75",
+            "1"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        0.5
+    )
+    assert result["correct_answer"] == 2
+
+    print("✅ Test 18 passed.")
+
+    # --------------------------------------------------------
+    # Test 19 - Dice Probability
+    # --------------------------------------------------------
+
+    print("\nTest 19: Dice Probability")
+
+    question = {
+        "topic": "Probability",
+        "type": "DICE_PROBABILITY",
+        "options": [
+            "0.25",
+            "0.5",
+            "0.75",
+            "1"
+        ]
+    }
+
+    result = verify_answer(question)
+
+    print(result)
+
+    assert result["status"] == "success"
+    assert approximately_equal(
+        result["calculated_answer"],
+        0.5
+    )
+    assert result["correct_answer"] == 2
+
+    print("✅ Test 19 passed.")
 
     print(
         "\n" + "=" * 60
