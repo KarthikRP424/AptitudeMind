@@ -1445,8 +1445,7 @@ def solve_quadratic_equation(question_data):
             explanation=(
                 f"Discriminant = {discriminant}. "
                 f"Real roots = {roots}. "
-                "None of the provided options "
-                "matches a calculated root."
+                "None of the provided options matches a calculated root."
             ),
             message=(
                 "Quadratic answer does not match "
@@ -1509,7 +1508,16 @@ def verify_answer(question_data):
         ""
     )
 
-    normalized_topic = topic.strip().lower()
+    # Normalize topic values safely so aliases such as
+    # "Time_Speed_Distance" and "Time-Speed-Distance" work.
+    normalized_topic = (
+        str(topic or "")
+        .strip()
+        .lower()
+        .replace("_", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+    )
 
     if normalized_topic == "percentage":
 
@@ -1626,30 +1634,28 @@ def verify_answer(question_data):
         "time speed distance",
         "speed",
         "distance",
-        "time"
+        "time",
     }:
-
-        question_type = question_data.get(
-            "question_type"
-        )
+        # For a specific topic like "speed", "distance", or "time",
+        # the question type can be inferred when it is not supplied.
+        question_type = str(
+            question_data.get(
+                "question_type",
+                normalized_topic
+                if normalized_topic in {"distance", "speed", "time"}
+                else "",
+            )
+            or ""
+        ).strip().lower().replace("_", " ").replace("-", " ")
 
         if question_type == "distance":
-
-            return solve_distance(
-                question_data
-            )
+            return solve_distance(question_data)
 
         if question_type == "speed":
-
-            return solve_speed(
-                question_data
-            )
+            return solve_speed(question_data)
 
         if question_type == "time":
-
-            return solve_time(
-                question_data
-            )
+            return solve_time(question_data)
 
         return create_result(
             status="error",
@@ -1657,7 +1663,7 @@ def verify_answer(question_data):
             message=(
                 "Time-Speed-Distance question requires "
                 "'question_type': 'distance', 'speed', or 'time'."
-            )
+            ),
         )
 
     if normalized_topic in {
@@ -2017,6 +2023,8 @@ def run_tests():
 
     assert result["status"] == "error"
     assert result["correct_answer"] is None
+    assert "provided options" in result["explanation"]
+    assert "providedoptions" not in result["explanation"]
 
     print("✅ Test 10 passed.")
 
