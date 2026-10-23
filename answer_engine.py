@@ -1485,6 +1485,81 @@ def solve_quadratic_equation(question_data):
 
 
 # ============================================================
+# Time and Work
+# ============================================================
+
+def solve_time_and_work(question_data):
+    """Calculate the time two people take to complete work together."""
+    import math
+
+    parameters = question_data.get("parameters", {})
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    time_a = question_data.get("time_a", parameters.get("time_a"))
+    time_b = question_data.get("time_b", parameters.get("time_b"))
+    options = question_data.get("options", [])
+
+    def positive_number(value, name):
+        if value is None or isinstance(value, bool):
+            raise ValueError(f"{name} must be a positive number.")
+
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{name} must be a valid number.") from None
+
+        if not math.isfinite(number) or number <= 0:
+            raise ValueError(f"{name} must be positive and finite.")
+
+        return number
+
+    try:
+        time_a = positive_number(time_a, "time_a")
+        time_b = positive_number(time_b, "time_b")
+    except ValueError as error:
+        return create_result(
+            status="error",
+            topic="Time and Work",
+            message=str(error),
+        )
+
+    rate_a = 1 / time_a
+    rate_b = 1 / time_b
+    combined_rate = rate_a + rate_b
+    combined_time = 1 / combined_rate
+
+    correct_option = find_matching_option(combined_time, options)
+
+    explanation = (
+        f"Person A's one-day work = 1/{time_a:g}\n"
+        f"Person B's one-day work = 1/{time_b:g}\n"
+        f"Combined one-day work = {rate_a:.10g} + {rate_b:.10g}"
+        f" = {combined_rate:.10g}\n"
+        f"Time taken together = 1 / {combined_rate:.10g}"
+        f" = {combined_time:.10g} days"
+    )
+
+    if correct_option is None:
+        return create_result(
+            status="error",
+            topic="Time and Work",
+            calculated_answer=combined_time,
+            explanation=explanation,
+            message="Calculated answer does not match any provided option.",
+        )
+
+    return create_result(
+        status="success",
+        topic="Time and Work",
+        calculated_answer=combined_time,
+        correct_answer=correct_option,
+        explanation=explanation,
+        message="Time and Work answer verified successfully.",
+    )
+
+
+# ============================================================
 # Main Answer Engine
 # ============================================================
 
@@ -1518,6 +1593,9 @@ def verify_answer(question_data):
         .replace("–", "-")
         .replace("—", "-")
     )
+
+    if normalized_topic.replace("-", " ") == "time and work":
+        return solve_time_and_work(question_data)
 
     if normalized_topic == "percentage":
 
